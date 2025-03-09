@@ -3,7 +3,6 @@ const s3Service = require('../../src/services/s3Service');
 const { Invoice } = require('../../src/models')
 const fs = require("fs");
 const path = require("path");
-const mockFs = require("mock-fs");
 const { DocumentAnalysisClient } = require("@azure/ai-form-recognizer");
 
 jest.mock("@azure/ai-form-recognizer");

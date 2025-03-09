@@ -1,5 +1,3 @@
-const path = require("path");
-
 const { Invoice } = require("../models");
 const s3Service = require("./s3Service")
 const { DocumentAnalysisClient, AzureKeyCredential } = require("@azure/ai-form-recognizer");
