@@ -10,6 +10,8 @@ const { uploadInvoice } = require("../../src/controllers/invoiceController");
 const pdfValidationService = require("../../src/services/pdfValidationService");
 const invoiceService = require("../../src/services/invoiceService");
 const authService = require("../../src/services/authService");
+const s3Service = require("../../src/services/s3Service");
+const validateDeletion = require("../../src/services/validateDeletion");
 
 // Jest-mock-req-res untuk unit test
 const { mockRequest, mockResponse } = require("jest-mock-req-res");
@@ -18,6 +20,8 @@ const { mockRequest, mockResponse } = require("jest-mock-req-res");
 jest.mock("../../src/services/pdfValidationService");
 jest.mock("../../src/services/invoiceService");
 jest.mock("../../src/services/authService");
+jest.mock("../../src/services/s3Service");
+jest.mock("../../src/services/validateDeletion");
 
 /* ------------------------------------------------------------------
    1) INVOICE CONTROLLER - uploadInvoice (UNIT TEST)
@@ -547,6 +551,449 @@ describe("getInvoiceById", () => {
   });
 });
 
+describe("Invoice Controller - deleteInvoiceById (Unit Test)", () => {
+  let req, res;
+  
+  beforeEach(() => {
+    req = {
+      params: { id: "1" },
+      user: { uuid: "user-uuid" }
+    };
+    
+    res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn()
+    };
+    
+    jest.clearAllMocks();
+  });
+  
+  describe("Positive Cases", () => {
+    test("should successfully delete an invoice with no file URL", async () => {
+      validateDeletion.validateInvoiceDeletion.mockResolvedValue({
+        id: 1,
+        partner_id: "user-uuid",
+        status: "Analyzed",
+        file_url: null
+      });
+      
+      invoiceService.deleteInvoiceById.mockResolvedValue({
+        message: "Invoice successfully deleted"
+      });
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(validateDeletion.validateInvoiceDeletion).toHaveBeenCalledWith("user-uuid", 1);
+      expect(s3Service.deleteFile).not.toHaveBeenCalled();
+      expect(invoiceService.deleteInvoiceById).toHaveBeenCalledWith("1");
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ message: "Invoice successfully deleted" });
+    });
+    
+    test("should successfully delete an invoice with a file URL", async () => {
+      validateDeletion.validateInvoiceDeletion.mockResolvedValue({
+        id: 1,
+        partner_id: "user-uuid",
+        status: "Analyzed",
+        file_url: "https://s3-bucket.com/invoices/file-123.pdf"
+      });
+      
+      s3Service.deleteFile.mockResolvedValue({ success: true });
+      
+      invoiceService.deleteInvoiceById.mockResolvedValue({
+        message: "Invoice successfully deleted"
+      });
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(validateDeletion.validateInvoiceDeletion).toHaveBeenCalledWith("user-uuid", 1);
+      expect(s3Service.deleteFile).toHaveBeenCalledWith("file-123.pdf");
+      expect(invoiceService.deleteInvoiceById).toHaveBeenCalledWith("1");
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ message: "Invoice successfully deleted" });
+    });
+  });
+  
+  describe("Negative Cases", () => {
+    test("should return 400 when invoice ID is missing", async () => {
+      req.params = {};
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ message: "Invalid invoice ID" });
+    });
+    
+    test("should return 400 when invoice ID is not a number", async () => {
+      req.params = { id: "abc" };
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ message: "Invalid invoice ID" });
+    });
+    
+    test("should return 400 when invoice ID is less than or equal to zero", async () => {
+      req.params = { id: "0" };
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ message: "Invalid invoice ID" });
+    });
+    
+    test("should return 401 when user is not authenticated", async () => {
+      req.user = null;
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ message: "Unauthorized" });
+    });
+    
+    test("should return 404 when invoice is not found", async () => {
+      validateDeletion.validateInvoiceDeletion.mockRejectedValue(
+        new Error("Invoice not found")
+      );
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ message: "Invoice not found" });
+    });
+    
+    test("should return 403 when user does not own the invoice", async () => {
+      validateDeletion.validateInvoiceDeletion.mockRejectedValue(
+        new Error("Unauthorized: You do not own this invoice")
+      );
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ message: "Unauthorized: You do not own this invoice" });
+    });
+    
+    test("should return 409 when invoice status is not Analyzed", async () => {
+      validateDeletion.validateInvoiceDeletion.mockRejectedValue(
+        new Error("Invoice cannot be deleted unless it is Analyzed")
+      );
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({ message: "Invoice cannot be deleted unless it is Analyzed" });
+    });
+  });
+  
+  describe("Corner Cases", () => {
+    test("should return 500 when S3 file deletion fails", async () => {
+      validateDeletion.validateInvoiceDeletion.mockResolvedValue({
+        id: 1,
+        partner_id: "user-uuid",
+        status: "Analyzed",
+        file_url: "https://s3-bucket.com/invoices/file-123.pdf"
+      });
+      
+      s3Service.deleteFile.mockResolvedValue({ 
+        success: false, 
+        error: "S3 deletion failed" 
+      });
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(s3Service.deleteFile).toHaveBeenCalledWith("file-123.pdf");
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ 
+        message: "Failed to delete file from S3", 
+        error: "S3 deletion failed" 
+      });
+    });
+    
+    test("should return 500 when database deletion fails", async () => {
+      validateDeletion.validateInvoiceDeletion.mockResolvedValue({
+        id: 1,
+        partner_id: "user-uuid",
+        status: "Analyzed",
+        file_url: null
+      });
+      
+      invoiceService.deleteInvoiceById.mockRejectedValue(
+        new Error("Database error")
+      );
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
+    });
+    
+    test("should return 500 when validation throws unknown error", async () => {
+      validateDeletion.validateInvoiceDeletion.mockRejectedValue(
+        new Error("Unknown error")
+      );
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
+    });
+    
+    test("should handle empty but valid file_url", async () => {
+      validateDeletion.validateInvoiceDeletion.mockResolvedValue({
+        id: 1,
+        partner_id: "user-uuid",
+        status: "Analyzed",
+        file_url: ""
+      });
+      
+      invoiceService.deleteInvoiceById.mockResolvedValue({
+        message: "Invoice successfully deleted"
+      });
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(s3Service.deleteFile).not.toHaveBeenCalled();
+      expect(invoiceService.deleteInvoiceById).toHaveBeenCalledWith("1");
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+    
+    test("should handle invalid file_url format", async () => {
+      validateDeletion.validateInvoiceDeletion.mockResolvedValue({
+        id: 1,
+        partner_id: "user-uuid",
+        status: "Analyzed",
+        file_url: "invalid-url-with-no-slashes"
+      });
+      
+      s3Service.deleteFile.mockResolvedValue({ success: true });
+      
+      invoiceService.deleteInvoiceById.mockResolvedValue({
+        message: "Invoice successfully deleted"
+      });
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(s3Service.deleteFile).toHaveBeenCalledWith("invalid-url-with-no-slashes");
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+    
+    test("should handle integer ID parameter", async () => {
+      req.params = { id: 1 };
+      
+      validateDeletion.validateInvoiceDeletion.mockResolvedValue({
+        id: 1,
+        partner_id: "user-uuid",
+        status: "Analyzed",
+        file_url: null
+      });
+      
+      invoiceService.deleteInvoiceById.mockResolvedValue({
+        message: "Invoice successfully deleted"
+      });
+      
+      await invoiceController.deleteInvoiceById(req, res);
+      
+      expect(validateDeletion.validateInvoiceDeletion).toHaveBeenCalledWith("user-uuid", 1);
+      expect(invoiceService.deleteInvoiceById).toHaveBeenCalledWith(1);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+});
+
+describe(" delete invoice (Integration) with Supertest", () => {
+  let localApp;
+
+  beforeAll(() => {
+    localApp = express();
+    localApp.use(bodyParser.json());
+    
+    const fakeAuthMiddleware = async (req, res, next) => {
+      try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        
+        const token = authHeader.split(' ')[1];
+        const partner = await authService.authenticate(token, 'any_secret');
+        if (!partner) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        
+        req.user = partner;
+        next();
+      } catch (err) {
+        return res.status(500).json({ message: "Internal server error" });
+      }
+    };
+    
+    localApp.delete("/api/invoices/:id", fakeAuthMiddleware, invoiceController.deleteInvoiceById);
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    
+    authService.authenticate.mockResolvedValue({ uuid: "user-uuid" });
+    
+    validateDeletion.validateInvoiceDeletion.mockResolvedValue({
+      id: 1,
+      partner_id: "user-uuid",
+      status: "Analyzed",
+      file_url: "https://s3-bucket/invoice.pdf"
+    });
+    
+    s3Service.deleteFile.mockResolvedValue({ success: true });
+    
+    invoiceService.deleteInvoiceById.mockResolvedValue({ 
+      message: "Invoice successfully deleted" 
+    });
+  });
+
+  afterAll((done) => {
+    jest.useRealTimers();
+    done();
+  });
+
+  test("should return 401 status when Authorization header is missing", async () => {
+    const res = await request(localApp)
+      .delete("/api/invoices/1");
+      
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ message: "Unauthorized" });
+  });
+
+  test("should return 401 status when authentication token is invalid", async () => {
+    authService.authenticate.mockResolvedValue(null);
+
+    const res = await request(localApp)
+      .delete("/api/invoices/1")
+      .set('Authorization', 'Bearer invalid_token');
+      
+    expect(authService.authenticate).toHaveBeenCalledWith("invalid_token", "any_secret");
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ message: "Unauthorized" });
+  });
+
+  test("should return 400 status if invoice ID is not a number", async () => {
+    const res = await request(localApp)
+      .delete("/api/invoices/abc")
+      .set('Authorization', 'Bearer valid_token');
+      
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ message: "Invalid invoice ID" });
+  });
+
+  test("should return 400 status if invoice ID is negative", async () => {
+    const res = await request(localApp)
+      .delete("/api/invoices/-1")
+      .set('Authorization', 'Bearer valid_token');
+      
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ message: "Invalid invoice ID" });
+  });
+
+  test("should return 404 status if invoice is not found", async () => {
+    validateDeletion.validateInvoiceDeletion.mockRejectedValue(
+      new Error("Invoice not found")
+    );
+
+    const res = await request(localApp)
+      .delete("/api/invoices/999")
+      .set('Authorization', 'Bearer valid_token');
+      
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ message: "Invoice not found" });
+  });
+
+  test("should return 403 status if user does not own the invoice", async () => {
+    validateDeletion.validateInvoiceDeletion.mockRejectedValue(
+      new Error("Unauthorized: You do not own this invoice")
+    );
+
+    const res = await request(localApp)
+      .delete("/api/invoices/1")
+      .set('Authorization', 'Bearer valid_token');
+      
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ message: "Unauthorized: You do not own this invoice" });
+  });
+
+  test("should return 409 status if invoice status is not 'Analyzed'", async () => {
+    validateDeletion.validateInvoiceDeletion.mockRejectedValue(
+      new Error("Invoice cannot be deleted unless it is Analyzed")
+    );
+
+    const res = await request(localApp)
+      .delete("/api/invoices/1")
+      .set('Authorization', 'Bearer valid_token');
+      
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ message: "Invoice cannot be deleted unless it is Analyzed" });
+  });
+
+  test("should return 500 status if S3 file deletion fails", async () => {
+    validateDeletion.validateInvoiceDeletion.mockResolvedValue({
+      id: 1,
+      partner_id: "user-uuid",
+      status: "Analyzed",
+      file_url: "https://s3-bucket/invoice.pdf"
+    });
+    
+    s3Service.deleteFile.mockResolvedValue({ 
+      success: false, 
+      error: "S3 deletion failed" 
+    });
+  
+    const res = await request(localApp)
+      .delete("/api/invoices/1")
+      .set('Authorization', 'Bearer valid_token');
+      
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ 
+      message: "Failed to delete file from S3",
+      error: "S3 deletion failed" 
+    });
+  });
+
+  test("should return 500 status if database error occurs when deleting invoice", async () => {
+    invoiceService.deleteInvoiceById.mockRejectedValue(
+      new Error("Database error")
+    );
+
+    const res = await request(localApp)
+      .delete("/api/invoices/1")
+      .set('Authorization', 'Bearer valid_token');
+      
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: "Internal server error" });
+  });
+
+  test("should return 500 status if unexpected error occurs", async () => {
+    authService.authenticate.mockImplementation(() => {
+      throw new Error("Unexpected error");
+    });
+
+    const res = await request(localApp)
+      .delete("/api/invoices/1")
+      .set('Authorization', 'Bearer valid_token');
+      
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: "Internal server error" });
+  });
+
+  test("should return 200 status if invoice is successfully deleted", async () => {
+    const res = await request(localApp)
+      .delete("/api/invoices/1")
+      .set('Authorization', 'Bearer valid_token');
+      
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ message: "Invoice successfully deleted" });
+    
+    expect(validateDeletion.validateInvoiceDeletion).toHaveBeenCalledWith("user-uuid", 1);
+    expect(s3Service.deleteFile).toHaveBeenCalled();
+    expect(invoiceService.deleteInvoiceById).toHaveBeenCalledWith("1");
+  });
+});
 /* ------------------------------------------------------------------
    3) INVOICE CONTROLLER - analyzeInvoice (UNIT TEST)
    ------------------------------------------------------------------ */
@@ -624,6 +1071,7 @@ describe("Invoice Controller - analyzeInvoice (Unit Test)", () => {
       message: "Failed to process the document" 
     });
   });
+
   test("should return 400 for 'Invalid date format' error", async () => {
     req.body = { documentUrl: "https://example.com/invoice.pdf" };
     
@@ -662,6 +1110,7 @@ describe("Invoice Controller - analyzeInvoice (Unit Test)", () => {
       savedInvoice: mockResult.savedInvoice
     });
   });
+
   test('should use custom timeout value when provided', async () => {
     // Setup request with custom timeout
     req = mockRequest({
