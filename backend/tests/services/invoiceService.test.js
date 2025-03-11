@@ -50,6 +50,12 @@ describe('uploadInvoice', () => {
     await expect(invoiceService.uploadInvoice(TEST_FILE)).rejects.toThrow('Failed to upload file to S3');
   });
 
+  test('should raise error when S3 upload returns nothing', async () => {
+    s3Service.uploadFile.mockResolvedValue(null);
+
+    await expect(invoiceService.uploadInvoice(TEST_FILE)).rejects.toThrow('Failed to upload file to S3');
+  });
+
   test('should raise error when saving to database fails', async () => {
     s3Service.uploadFile.mockResolvedValue(TEST_S3_URL);
     Invoice.create.mockRejectedValue(new Error('Failed to save invoice to database'));

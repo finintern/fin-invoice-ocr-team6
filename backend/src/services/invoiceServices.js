@@ -17,7 +17,7 @@ class InvoiceService {
       const fileBuffer = file.buffer;
       const s3Url = await s3Service.uploadFile(fileBuffer);
       if (!s3Url) {
-        throw new Error("Failed to upload file to S3");
+        throw new Error("Failed to upload file to S3 url empty");
       }
 
       const invoiceData = {
