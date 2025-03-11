@@ -34,24 +34,88 @@ class InvoiceService {
    * @throws {Error} If file validation fails, S3 upload fails, analysis fails, or database operations fail
    */
   async uploadInvoice(fileData) {
-    let invoice;
-    try {
-      this.validateFileData(fileData);
-      const { buffer, originalname, partnerId } = fileData;
-      const s3Url = await this.uploadToS3(buffer);
-      invoice = await this.createInvoiceRecord(partnerId, s3Url);
-      const analysisResult = await this.analyzeInvoice(buffer);
-      const { invoiceData2, customerData, vendorData } = this.mapAnalysisResult(analysisResult, partnerId, originalname, buffer.length);
-      await this.updateInvoiceRecord(invoice.id, invoiceData2);
-      await this.updateCustomerAndVendorData(invoice.id, customerData, vendorData);
-      return this.buildResponse(invoice);
-    } catch (error) {
-      if (invoice?.id) {
-        await Invoice.update({ status: "Failed" }, { where: { id: invoice.id } });
+    return this._withSentryTracing('uploadInvoice', fileData, async () => {
+      let invoice;
+      try {
+        invoice = await this._processInvoiceUpload(fileData);
+        this._captureSuccess('Invoice upload completed', { invoiceId: invoice.id });
+        return this.buildResponse(invoice);
+      } catch (error) {
+        await this._handleUploadError(error, invoice);
+        throw error;
       }
-      console.error("Error processing invoice:", error);
-      throw new Error("Failed to process invoice: " + error.message);
+    });
+  }
+
+  async _processInvoiceUpload(fileData) {
+    this._addBreadcrumb('Starting invoice upload process');
+    this.validateFileData(fileData);
+
+    const { buffer, originalname, partnerId } = fileData;
+    
+    this._addBreadcrumb('Uploading file to S3');
+    const s3Url = await this.uploadToS3(buffer);
+
+    this._addBreadcrumb('Creating initial invoice record');
+    const invoice = await this.createInvoiceRecord(partnerId, s3Url);
+
+    this._addBreadcrumb('Analyzing invoice');
+    const analysisResult = await this.analyzeInvoice(buffer);
+
+    this._addBreadcrumb('Processing analysis results');
+    const { invoiceData2, customerData, vendorData } = 
+      this.mapAnalysisResult(analysisResult, partnerId, originalname, buffer.length);
+
+    this._addBreadcrumb('Updating records');
+    await this.updateInvoiceRecord(invoice.id, invoiceData2);
+    await this.updateCustomerAndVendorData(invoice.id, customerData, vendorData);
+
+    return invoice;
+  }
+
+  _withSentryTracing(operation, data, callback) {
+    return Sentry.startSpan(
+      {
+        name: operation,
+        attributes: {
+          originalname: data?.originalname,
+          partnerId: data?.partnerId,
+        },
+      },
+      callback
+    );
+  }
+
+  _addBreadcrumb(message, level = 'info') {
+    Sentry.addBreadcrumb({
+      category: 'uploadInvoice',
+      message,
+      level,
+    });
+  }
+
+  _captureSuccess(message, extra = {}) {
+    Sentry.captureMessage(message, {
+      level: 'info',
+      extra,
+    });
+  }
+
+  async _handleUploadError(error, invoice) {
+    this._addBreadcrumb(`Error encountered: ${error.message}`, 'error');
+
+    if (invoice?.id) {
+      this._addBreadcrumb(`Updating invoice status to Failed for ID: ${invoice.id}`, 'warning');
+      await Invoice.update({ status: "Failed" }, { where: { id: invoice.id } });
     }
+
+    Sentry.captureException(error, {
+      extra: {
+        invoiceId: invoice?.id,
+      },
+    });
+
+    console.error("Error processing invoice:", error);
   }
 
   validateFileData(fileData) {
