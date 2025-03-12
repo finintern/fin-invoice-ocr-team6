@@ -136,6 +136,7 @@ jobs:
           echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
           echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
           echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+          echo "DSN=${{ secrets.DSN }}" >> .env
           echo "cat .env"
           cat .env
 
@@ -143,8 +144,8 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
             cd ~/fin-invoice-ocr-team6/backend &&
-            git reset --hard HEAD &&
-            git pull origin staging &&
+            git fetch origin &&
+            git reset --hard origin/staging &&
             npm ci &&
             npx sequelize-cli db:migrate --env staging &&
             pm2 restart invoice-ocr-backend || pm2 start server.js --name invoice-ocr-backend &&
