@@ -48,29 +48,42 @@ class InvoiceService {
   }
 
   async _processInvoiceUpload(fileData) {
-    this._addBreadcrumb('Starting invoice upload process');
-    this.validateFileData(fileData);
-
-    const { buffer, originalname, partnerId } = fileData;
-    
-    this._addBreadcrumb('Uploading file to S3');
-    const s3Url = await this.uploadToS3(buffer);
-
-    this._addBreadcrumb('Creating initial invoice record');
-    const invoice = await this.createInvoiceRecord(partnerId, s3Url);
-
-    this._addBreadcrumb('Analyzing invoice');
-    const analysisResult = await this.analyzeInvoice(buffer);
-
-    this._addBreadcrumb('Processing analysis results');
-    const { invoiceData2, customerData, vendorData } = 
-      this.mapAnalysisResult(analysisResult, partnerId, originalname, buffer.length);
-
-    this._addBreadcrumb('Updating records');
-    await this.updateInvoiceRecord(invoice.id, invoiceData2);
-    await this.updateCustomerAndVendorData(invoice.id, customerData, vendorData);
-
-    return invoice;
+    let invoice;
+    try {
+      this._addBreadcrumb('Starting invoice upload process');
+      this.validateFileData(fileData);
+  
+      const { buffer, originalname, partnerId } = fileData;
+      
+      this._addBreadcrumb('Uploading file to S3');
+      const s3Url = await this.uploadToS3(buffer);
+  
+      this._addBreadcrumb('Creating initial invoice record');
+      invoice = await this.createInvoiceRecord(partnerId, s3Url);
+  
+      this._addBreadcrumb('Analyzing invoice');
+      const analysisResult = await this.analyzeInvoice(buffer);
+  
+      this._addBreadcrumb('Processing analysis results');
+      const { invoiceData2, customerData, vendorData } = 
+        this.mapAnalysisResult(analysisResult, partnerId, originalname, buffer.length);
+  
+      // Validate mapped data
+      if (!invoiceData2 || Object.keys(invoiceData2).length === 0) {
+        throw new Error('Invalid OCR result format');
+      }
+  
+      this._addBreadcrumb('Updating records');
+      await this.updateInvoiceRecord(invoice.id, invoiceData2);
+      await this.updateCustomerAndVendorData(invoice.id, customerData, vendorData);
+  
+      return invoice;
+    } catch (error) {
+      if (invoice?.id) {
+        await Invoice.update({ status: 'Failed' }, { where: { id: invoice.id } });
+      }
+      throw error;
+    }
   }
 
   _withSentryTracing(operation, data, callback) {
