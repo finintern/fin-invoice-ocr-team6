@@ -209,7 +209,7 @@ describe('uploadInvoice - Corner Cases', () => {
       })
     };
 
-    await expect(invoiceService.uploadInvoice(mockParams)).rejects.toThrow('Failed to process invoice: Invalid OCR result format');
+    await expect(invoiceService.uploadInvoice(mockParams)).rejects.toThrow('Invalid OCR result format');
     expect(Invoice.update).toHaveBeenCalledWith({ status: 'Failed' }, { where: { id: 1 } });
   });
 
@@ -238,7 +238,7 @@ describe('uploadInvoice - Corner Cases', () => {
     });
 
     await expect(invoiceService.uploadInvoice(mockParams))
-      .rejects.toThrow('Failed to process invoice: Failed to analyze invoice: No data returned');
+      .rejects.toThrow('Failed to analyze invoice: No data returned');
 
     expect(Invoice.update).toHaveBeenCalledWith(
       { status: "Failed" },
@@ -258,7 +258,7 @@ describe('uploadInvoice - Corner Cases', () => {
     s3Service.uploadFile.mockResolvedValue('https://example.com/test.pdf');
 
     await expect(invoiceService.uploadInvoice(mockParams))
-      .rejects.toThrow('Failed to process invoice: Database connection error');
+      .rejects.toThrow('Database connection error');
 
     expect(Invoice.update).not.toHaveBeenCalled();
   });
