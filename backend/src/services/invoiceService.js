@@ -360,44 +360,75 @@ class InvoiceService extends FinancialDocumentService {
 
   // Fungsi utama dengan kompleksitas yang dikurangi
   async getInvoiceById(id) {
-    try {
-      const invoice = await Invoice.findOne({
-        where: { id: id }
-      });
-
-      if (!invoice) {
-        throw new Error("Invoice not found");
-      }
-
-      // Get basic invoice data
-      let invoiceData = invoice.get({ plain: true });
-
-      // Get related entities (customer and vendor)
-      invoiceData = await this._getInvoiceRelatedEntities(invoiceData);
-
-      // Get items with details
-      const formattedItems = await this._getInvoiceItemsWithDetails(id);
-      invoiceData.items = formattedItems;
-
-      // Format response
-      const formattedResponse = this._formatInvoiceResponse(invoiceData);
-
-      // Bungkus dalam format yang diminta
-      return {
-        data: {
-          documents: [formattedResponse]
+    return Sentry.startSpan(
+      {
+        name: "getInvoiceById",
+        attributes: {
+          invoiceId: id,
+        },
+      },
+      async (span) => {
+        try {
+          Sentry.addBreadcrumb({
+            category: "invoice",
+            message: `Fetching invoice by ID: ${id}`,
+            level: "info",
+          });
+  
+          const invoice = await Invoice.findOne({
+            where: { id: id }
+          });
+  
+          if (!invoice) {
+            Sentry.captureMessage(`Invoice not found: ${id}`);
+            throw new Error("Invoice not found");
+          }
+  
+          Sentry.addBreadcrumb({
+            category: "invoice",
+            message: `Invoice found: ${id}`,
+            level: "info",
+          });
+  
+          let invoiceData = invoice.get({ plain: true });
+  
+          invoiceData = await this._getInvoiceRelatedEntities(invoiceData);
+  
+          const formattedItems = await this._getInvoiceItemsWithDetails(id);
+          invoiceData.items = formattedItems;
+  
+          const formattedResponse = this._formatInvoiceResponse(invoiceData);
+  
+          Sentry.captureMessage(`Successfully retrieved and formatted invoice ${id}`);
+  
+          return {
+            data: {
+              documents: [formattedResponse]
+            }
+          };
+  
+        } catch (error) {
+          console.error("Error retrieving invoice:", error);
+  
+          Sentry.captureException(error);
+          Sentry.addBreadcrumb({
+            category: "error",
+            message: `Failed to retrieve invoice ${id}: ${error.message}`,
+            level: "error",
+          });
+  
+          if (error.message === "Invoice not found") {
+            throw error;
+          } else {
+            throw new Error("Failed to retrieve invoice: " + error.message);
+          }
+        } finally {
+          span.end();
         }
-      };
-
-    } catch (error) {
-      console.error("Error retrieving invoice:", error);
-      if (error.message === "Invoice not found") {
-        throw error;
-      } else {
-        throw new Error("Failed to retrieve invoice: " + error.message);
       }
- }
+    );
   }
+  
   async analyzeInvoice(documentUrl) {
     if (!documentUrl) {
       throw new Error("documentUrl is required");
