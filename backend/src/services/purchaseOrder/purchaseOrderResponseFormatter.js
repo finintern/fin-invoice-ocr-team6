@@ -6,7 +6,6 @@ class PurchaseOrderResponseFormatter {
           invoice_id: null,
           purchase_order_id: purchaseOrder.po_number,
           invoice_date: null,
-          due_date: purchaseOrder.due_date,
           payment_terms: purchaseOrder.payment_terms
         },
         vendor_details: this._formatVendorDetails(vendor),

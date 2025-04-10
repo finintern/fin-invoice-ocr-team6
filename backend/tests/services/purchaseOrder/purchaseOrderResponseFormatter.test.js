@@ -16,7 +16,6 @@ describe('PurchaseOrderResponseFormatter', () => {
       original_filename: 'test.pdf',
       file_size: 1024,
       file_url: 'https://example.com/test.pdf',
-      due_date: '2023-05-31',
       payment_terms: 'Net 30',
       currency_code: 'USD',
       total_amount: 300,
@@ -56,7 +55,6 @@ describe('PurchaseOrderResponseFormatter', () => {
                 invoice_id: null,
                 purchase_order_id: 'PO-001',
                 invoice_date: null,
-                due_date: '2023-05-31',
                 payment_terms: 'Net 30'
               },
               vendor_details: {
