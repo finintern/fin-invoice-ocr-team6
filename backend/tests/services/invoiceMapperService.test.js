@@ -291,27 +291,61 @@ describe('AzureInvoiceMapper', () => {
       expect(timeDiff).toBeLessThan(1000);
     });
     
-    it('should handle multiple date formats correctly', () => {
-      // Helper function to check date parts
-      const checkDateParts = (dateStr, expectedYear, expectedMonth, expectedDay) => {
-        const date = mapper.parseDate({ content: dateStr });
-        expect(date.getFullYear()).toBe(expectedYear);
-        expect(date.getMonth() + 1).toBe(expectedMonth);
-        expect(date.getDate()).toBe(expectedDay);
-      };
+  });
+  describe("Date Format Parsing", () => {
+    it('should correctly handle DD/MM/YY date format', () => {
+      const mapper = new AzureInvoiceMapper();
       
-      checkDateParts('2023-05-15', 2023, 5, 15); // ISO format
-      checkDateParts('05/15/2023', 2023, 5, 15); // US format
-      checkDateParts('05-15-2023', 2023, 5, 15); // Hyphen format
-      checkDateParts('2023.05.15', 2023, 5, 15); // Dot format
+      // Test DD/MM/YY format (28/02/25 should be Feb 28, 2025)
+      const dateDDMMYY = mapper.parseDate({ content: '28/02/25' });
+      expect(dateDDMMYY.getFullYear()).toBe(2025);
+      expect(dateDDMMYY.getMonth() + 1).toBe(2); // Month is 0-indexed
+      expect(dateDDMMYY.getDate()).toBe(28);
       
-      // Date with time
-      const dateWithTime = mapper.parseDate({ content: '2023-05-15T14:30:00' });
-      expect(dateWithTime.getHours()).toBeTruthy();
-      expect(dateWithTime.getMinutes()).toBe(30);
+      // Test another DD/MM/YY format with single digits
+      const dateSingleDigits = mapper.parseDate({ content: '5/7/23' });
+      expect(dateSingleDigits.getFullYear()).toBe(2023);
+      expect(dateSingleDigits.getMonth() + 1).toBe(7);
+      expect(dateSingleDigits.getDate()).toBe(5);
+      
+      // Test year interpretation (years < 50 are 20xx, >= 50 are 19xx)
+      const dateOlderYear = mapper.parseDate({ content: '15/06/55' });
+      expect(dateOlderYear.getFullYear()).toBe(1955);
+      expect(dateOlderYear.getMonth() + 1).toBe(6);
+      expect(dateOlderYear.getDate()).toBe(15);
+    });
+    
+    it('should correctly handle DD/MM/YYYY date format', () => {
+      const mapper = new AzureInvoiceMapper();
+      
+      // Test DD/MM/YYYY format
+      const dateDDMMYYYY = mapper.parseDate({ content: '28/02/2025' });
+      expect(dateDDMMYYYY.getFullYear()).toBe(2025);
+      expect(dateDDMMYYYY.getMonth() + 1).toBe(2);
+      expect(dateDDMMYYYY.getDate()).toBe(28);
+      
+      // Test with single digits
+      const dateSingleDigits = mapper.parseDate({ content: '5/7/2023' });
+      expect(dateSingleDigits.getFullYear()).toBe(2023);
+      expect(dateSingleDigits.getMonth() + 1).toBe(7);
+      expect(dateSingleDigits.getDate()).toBe(5);
+    });
+    
+    it('should correctly handle invalid date formats by using current date', () => {
+      const mapper = new AzureInvoiceMapper();
+      
+      // Mock date.now to have consistent test results
+      const now = new Date('2025-01-01T12:00:00Z');
+      jest.spyOn(global, 'Date').mockImplementation(() => now);
+      
+      // Test invalid format that should fall back to current date
+      const invalidDate = mapper.parseDate({ content: 'not-a-date' });
+      expect(invalidDate).toEqual(now);
+      
+      // Clean up
+      jest.restoreAllMocks();
     });
   });
-
   describe('Field Parsing', () => {
     it('should safely handle field content extraction', () => {
       expect(mapper.getFieldContent(null)).toBeNull();
@@ -392,7 +426,53 @@ describe('AzureInvoiceMapper', () => {
       // Test case for null field
       expect(mapper.parseCurrency(null)).toEqual({ amount: null, currency: { currencySymbol: null, currencyCode: null } });
     });
-    
+    it('should correctly parse Rupiah currency format', () => {
+      const mapper = new AzureInvoiceMapper();
+      
+      // Test structured currency field with Rupiah content
+      const rupiahField = {
+        value: {
+          amount: 100000, // This value should be overridden by the parsed content
+          currencySymbol: '$', // This should be replaced with Rp
+          currencyCode: 'USD' // This should be replaced with IDR
+        },
+        content: 'Rp67.998'
+      };
+      
+      const result = mapper.parseCurrency(rupiahField);
+      
+      // Should parse Indonesian number format (67.998 → 67998)
+      expect(result.amount).toBe(67998);
+      expect(result.currency.currencySymbol).toBe('Rp');
+      expect(result.currency.currencyCode).toBe('IDR');
+      
+      // Test with decimal comma
+      const rupiahWithDecimal = {
+        value: {
+          amount: 50000
+        },
+        content: 'Rp45.750,50'
+      };
+      
+      const resultWithDecimal = mapper.parseCurrency(rupiahWithDecimal);
+      // 45.750,50 should be converted to 45750.50
+      expect(resultWithDecimal.amount).toBe(45750.50);
+      expect(resultWithDecimal.currency.currencySymbol).toBe('Rp');
+      expect(resultWithDecimal.currency.currencyCode).toBe('IDR');
+      
+      // Test with no thousands separator
+      const simplifiedRupiah = {
+        value: {
+          amount: 1000
+        },
+        content: 'Rp5000'
+      };
+      
+      const simpleResult = mapper.parseCurrency(simplifiedRupiah);
+      expect(simpleResult.amount).toBe(5000);
+      expect(simpleResult.currency.currencySymbol).toBe('Rp');
+      expect(simpleResult.currency.currencyCode).toBe('IDR');
+    });
     it('should handle edge cases in parsePurchaseOrderId', () => {
       expect(mapper.parsePurchaseOrderId({ content: '12345' })).toBe(12345);
       expect(mapper.parsePurchaseOrderId({ content: 'ABC-DEF' })).toBe(0);
@@ -435,7 +515,6 @@ describe('AzureInvoiceMapper', () => {
       };
       
       const result1 = mapper.extractLineItems(standardItems);
-      console.log("ppp", result1)
       expect(result1[0].description).toBe('Standard Item');
       expect(result1[0].quantity).toBe(2);
       expect(result1[0].unitPrice).toBe(10);
@@ -535,245 +614,151 @@ describe('AzureInvoiceMapper', () => {
     });
   });
 
-  describe('Address Processing', () => {
-    it('should handle different address patterns for customer address extraction', () => {
-      // City, STATE ZIP pattern
-      const addressWithCityStateZip = {
-        content: '123 Main St\nAustin, TX 78701'
+
+  describe('extractInvoiceNumber', () => {
+    test('should extract from InvoiceId field when available', () => {
+      // Arrange
+      const fields = {
+        InvoiceId: { value: 'INV-12345' },
+        InvoiceNumber: { value: 'Should not use this' },
       };
-      const result1 = mapper.extractCustomerAddress(addressWithCityStateZip);
-      expect(result1.street_address).toBe('123 Main St');
-      expect(result1.city).toBe('Austin');
-      expect(result1.state).toBe('TX');
-      expect(result1.postal_code).toBe('78701');
-      
-      // City STATE ZIP pattern (no comma)
-      const addressWithoutComma = {
-        content: '456 Oak Ave\nSeattle WA 98101'
-      };
-      const result2 = mapper.extractCustomerAddress(addressWithoutComma);
-      expect(result2.city).toBe('Seattle');
-      expect(result2.state).toBe('WA');
-      expect(result2.postal_code).toBe('98101');
-      
-      // International format
-      const internationalAddress = {
-        content: '789 High Street\nLondon, England EC1A 1BB'
-      };
-      const result3 = mapper.extractCustomerAddress(internationalAddress);
-      expect(result3.city).toBe('London');
-      expect(result3.state).toBe('England');
-      expect(result3.postal_code).toBe('EC1A 1BB');
+
+      // Act
+      const result = mapper.extractInvoiceNumber(fields);
+
+      // Assert
+      expect(result).toBe('INV-12345');
     });
-    
-    it('should handle structured address data in value property', () => {
-      // With standard property names
-      const structuredAddressField = {
-        value: {
-          streetAddress: '123 Main Avenue',
-          city: 'Boston',
-          state: 'MA',
-          postalCode: '02108',
-          houseNumber: '123'
-        }
+
+    test('should extract from InvoiceNumber when InvoiceId is not available', () => {
+      // Arrange
+      const fields = {
+        InvoiceNumber: { value: 'INV-12345' }
       };
-      
-      const result = mapper.extractCustomerAddress(structuredAddressField);
-      expect(result.street_address).toBe('123 Main Avenue');
-      expect(result.city).toBe('Boston');
-      expect(result.state).toBe('MA');
-      expect(result.postal_code).toBe('02108');
-      expect(result.house).toBe('123');
-      
-      // With alternative property names
-      const alternativeAddressField = {
-        value: {
-          road: 'Oak Street',
-          locality: 'Chicago',
-          region: 'IL',
-          zipCode: '60601',
-          building: 'Building A'
-        }
-      };
-      
-      const result2 = mapper.extractCustomerAddress(alternativeAddressField);
-      expect(result2.street_address).toBe('Oak Street');
-      expect(result2.city).toBe('Chicago');
-      expect(result2.state).toBe('IL');
-      expect(result2.postal_code).toBe('60601');
-      expect(result2.house).toBe('Building A');
+
+      // Act
+      const result = mapper.extractInvoiceNumber(fields);
+
+      // Assert
+      expect(result).toBe('INV-12345');
     });
-    
-    it('should handle additional fallback field names in address extraction', () => {
-      const addressWithRareFallbacks = {
-        value: {
-          street: 'Maple Avenue',
-          city: 'Toronto',
-          province: 'Ontario',
-          postalCode: 'M5V 2L7',
-          building: '42'
-        }
+
+    test('should extract from "Invoice number" when other fields are not available', () => {
+      // Arrange
+      const fields = {
+        "Invoice number": { value: 'INV-12345' }
       };
-      
-      const result = mapper.extractCustomerAddress(addressWithRareFallbacks);
-      expect(result.street_address).toBe('Maple Avenue');
-      expect(result.city).toBe('Toronto');
-      expect(result.state).toBe('Ontario');
-      expect(result.postal_code).toBe('M5V 2L7');
-      expect(result.house).toBe('42');
+
+      // Act
+      const result = mapper.extractInvoiceNumber(fields);
+
+      // Assert
+      expect(result).toBe('INV-12345');
     });
-    
-    it('should handle missing address components separately', () => {
-      // Missing state but has city and postal code
-      const addressWithMissingState = {
-        value: {
-          streetAddress: '123 Main St',
-          city: 'Portland',
-          postalCode: '97201'
-        }
+
+    test('should extract from "Invoice #" when other fields are not available', () => {
+      // Arrange
+      const fields = {
+        "Invoice #": { value: 'INV-12345' }
       };
-      
-      const result1 = mapper.extractCustomerAddress(addressWithMissingState);
-      expect(result1.city).toBe('Portland');
-      expect(result1.state).toBeNull();
-      expect(result1.postal_code).toBe('97201');
-      
-      // Missing postal code but has city and state
-      const addressWithMissingPostalCode = {
-        value: {
-          streetAddress: '456 Oak Ave',
-          city: 'Seattle',
-          state: 'WA',
-        }
-      };
-      
-      const result2 = mapper.extractCustomerAddress(addressWithMissingPostalCode);
-      expect(result2.city).toBe('Seattle');
-      expect(result2.state).toBe('WA');
-      expect(result2.postal_code).toBeNull();
-      
-      // Missing all components
-      const addressWithNoComponents = {
-        value: {}
-      };
-      
-      const result3 = mapper.extractCustomerAddress(addressWithNoComponents);
-      expect(result3.street_address).toBeNull();
-      expect(result3.city).toBeNull();
-      expect(result3.state).toBeNull();
-      expect(result3.postal_code).toBeNull();
-      expect(result3.house).toBeNull();
+
+      // Act
+      const result = mapper.extractInvoiceNumber(fields);
+
+      // Assert
+      expect(result).toBe('INV-12345');
     });
-    
-    it('should handle component extraction from content when needed', () => {
-      // State missing from value but in content
-      const stateMissingWithContent = {
-        value: {
-          streetAddress: '456 Oak St',
-          city: 'Portland',
-          postalCode: '97201'
-        },
-        content: '456 Oak St\nPortland, OR 97201'
+
+    test('should extract from "Invoice No" when other fields are not available', () => {
+      // Arrange
+      const fields = {
+        "Invoice No": { value: 'INV-12345' }
       };
-      
-      const result1 = mapper.extractCustomerAddress(stateMissingWithContent);
-      expect(result1.city).toBe('Portland');
-      expect(result1.state).toBe('OR');
-      expect(result1.postal_code).toBe('97201');
-      
-      // Postal code missing from value but in content
-      const postalMissingWithContent = {
-        value: {
-          streetAddress: '789 Pine St',
-          city: 'Seattle',
-          state: 'WA',
-        },
-        content: '789 Pine St\nSeattle, WA 98101'
-      };
-      
-      const result2 = mapper.extractCustomerAddress(postalMissingWithContent);
-      expect(result2.city).toBe('Seattle');
-      expect(result2.state).toBe('WA');
-      expect(result2.postal_code).toBe('98101');
-      
-      // City missing from value but in content
-      const cityMissingWithContent = {
-        value: {
-          streetAddress: '123 Market St',
-          state: 'CA',
-          postalCode: '94105'
-        },
-        content: '123 Market St\nSan Francisco, CA 94105'
-      };
-      
-      const result3 = mapper.extractCustomerAddress(cityMissingWithContent);
-      expect(result3.city).toBe('San Francisco');
-      expect(result3.state).toBe('CA');
-      expect(result3.postal_code).toBe('94105');
+
+      // Act
+      const result = mapper.extractInvoiceNumber(fields);
+
+      // Assert
+      expect(result).toBe('INV-12345');
     });
-    
-    it('should not use content when all components exist in value', () => {
-      const addressWithAllComponents = {
-        value: {
-          streetAddress: '100 Main St',
-          city: 'Boston',
-          state: 'MA',
-          postalCode: '02108',
-          houseNumber: '100'
-        },
-        content: '999 Different St\nNew York, NY 10001'
+
+    test('should extract from "Invoice No." when other fields are not available', () => {
+      // Arrange
+      const fields = {
+        "Invoice No.": { value: 'INV-12345' }
       };
-      
-      const result = mapper.extractCustomerAddress(addressWithAllComponents);
-      
-      expect(result.city).toBe('Boston');
-      expect(result.state).toBe('MA');
-      expect(result.postal_code).toBe('02108');
-      expect(result.street_address).toBe('100 Main St');
+
+      // Act
+      const result = mapper.extractInvoiceNumber(fields);
+
+      // Assert
+      expect(result).toBe('INV-12345');
     });
-    
-    it('should handle house number extraction edge cases', () => {
-      // street_address is null with content fallback
-      const addressWithNullStreet = {
-        value: {
-          city: 'Portland',
-          state: 'OR',
-          postalCode: '97201'
-        },
-        content: '123 Oak Lane\nPortland, OR 97201'
+
+    test('should return empty string when no invoice number field is available', () => {
+      // Arrange
+      const fields = {
+        SomeOtherField: { value: 'Not an invoice number' }
       };
-      
-      const result1 = mapper.extractCustomerAddress(addressWithNullStreet);
-      expect(result1.street_address).toBe('123 Oak Lane');
-      expect(result1.house).toBe('123');
-      
-      // Address without extractable house number
-      const addressWithoutHouseNumber = {
-        value: {
-          streetAddress: 'Main Street, Apt B',
-          city: 'Chicago',
-          state: 'IL',
-          postalCode: '60601'
-        }
+
+      // Act
+      const result = mapper.extractInvoiceNumber(fields);
+
+      // Assert
+      expect(result).toBe('');
+    });
+
+    test('should return empty string when fields is null or undefined', () => {
+      // Arrange - Null case
+      const nullFields = null;
+
+      // Act
+      const nullResult = mapper.extractInvoiceNumber(nullFields);
+
+      // Assert
+      expect(nullResult).toBe('');
+
+      // Arrange - Undefined case
+      const undefinedFields = undefined;
+
+      // Act
+      const undefinedResult = mapper.extractInvoiceNumber(undefinedFields);
+
+      // Assert
+      expect(undefinedResult).toBe('');
+    });
+
+    test('should handle different value formats from OCR', () => {
+      // Arrange - Field with content property
+      const fieldsWithContent = {
+        InvoiceId: { content: 'INV-12345' }
       };
-      
-      const result2 = mapper.extractCustomerAddress(addressWithoutHouseNumber);
-      expect(result2.street_address).toBe('Main Street, Apt B');
-      expect(result2.house).toBeNull();
-      
-      // Empty content with no street_address
-      const addressWithNoStreetAndEmptyContent = {
-        value: {
-          city: 'Seattle',
-          state: 'WA',
-          postalCode: '98101'
-        },
-        content: ''
+
+      // Arrange - Field with nested text value
+      const fieldsWithNestedValue = {
+        InvoiceId: { value: { text: 'INV-67890' } }
       };
-      
-      const result3 = mapper.extractCustomerAddress(addressWithNoStreetAndEmptyContent);
-      expect(result3.street_address).toBeNull();
-      expect(result3.house).toBeNull();
+
+      // Act
+      const contentResult = mapper.extractInvoiceNumber(fieldsWithContent);
+      const nestedResult = mapper.extractInvoiceNumber(fieldsWithNestedValue);
+
+      // Assert
+      expect(contentResult).toBe('INV-12345');
+      expect(nestedResult).toBe('INV-67890');
+    });
+
+    test('should trim whitespace from extracted value', () => {
+      // Arrange
+      const fields = {
+        InvoiceId: { value: '  INV-12345  ' }
+      };
+
+      // Act
+      const result = mapper.extractInvoiceNumber(fields);
+
+      // Assert
+      expect(result).toBe('INV-12345');
     });
   });
 });
