@@ -286,33 +286,39 @@ class PurchaseOrderService extends FinancialDocumentService {
   async getPurchaseOrderById(id) {
     try {
       const purchaseOrder = await this.purchaseOrderRepository.findById(id);
-      
+  
       if (!purchaseOrder) {
         throw new Error("Purchase order not found");
       }
-      
-      // Get the items associated with this purchase order
-      const items = await this.getItems(id);
-      
-      // Get the customer associated with this purchase order
+  
+      // Manually fetch items using itemRepository (reuses the same logic as in invoice)
+      const items = await this.itemRepository.findItemsByDocumentId(id, 'PurchaseOrder');
+  
+      // Manually fetch customer
       let customer = null;
       if (purchaseOrder.customer_id) {
-        customer = await this.getCustomer(purchaseOrder.customer_id);
+        customer = await this.customerRepository.findById(purchaseOrder.customer_id);
       }
-      
-      // Get the vendor associated with this purchase order
+  
+      // Manually fetch vendor
       let vendor = null;
       if (purchaseOrder.vendor_id) {
-        vendor = await this.getVendor(purchaseOrder.vendor_id);
+        vendor = await this.vendorRepository.findById(purchaseOrder.vendor_id);
       }
-      
-      // Format and return the response
-      return this.responseFormatter.formatPurchaseOrderResponse(purchaseOrder, items, customer, vendor);
+  
+      // Format the final response
+      return this.responseFormatter.formatPurchaseOrderResponse(
+        purchaseOrder,
+        items,
+        customer,
+        vendor
+      );
     } catch (error) {
       console.error("Error retrieving purchase order:", error);
       throw error;
     }
   }
+  
 
   /**
    * Get partner ID from purchase order

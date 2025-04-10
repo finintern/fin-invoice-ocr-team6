@@ -78,3 +78,32 @@ exports.analyzePurchaseOrder = async (req, res) => {
     }
   }
 };
+
+exports.getPurchaseOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: "Purchase Order ID is required" });
+    }
+
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const poPartnerId = await PurchaseOrderService.getPartnerId(id);
+
+    if (poPartnerId !== req.user.uuid) {
+      return res.status(403).json({ message: "Forbidden: You do not have access to this purchase order" });
+    }
+
+    const poDetail = await PurchaseOrderService.getPurchaseOrderById(id);
+
+    return res.status(200).json(poDetail);
+  } catch (error) {
+    if (error.message === "Purchase order not found") {
+      return res.status(404).json({ message: "Purchase order not found" });
+    }
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
