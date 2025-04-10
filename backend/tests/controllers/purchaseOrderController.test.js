@@ -4,6 +4,8 @@ const FinancialDocumentController = require("../../src/controllers/financialDocu
 const purchaseOrderService = require("../../src/services/purchaseOrder/purchaseOrderService");
 const pdfValidationService = require("../../src/services/pdfValidationService");
 const authService = require("../../src/services/authService");
+const { getPurchaseOrderById } = require('../../src/controllers/purchaseOrderController');
+
 
 jest.mock("../../src/services/purchaseOrder/purchaseOrderService");
 jest.mock("../../src/services/pdfValidationService");
@@ -284,3 +286,88 @@ describe("Purchase Order Controller - uploadPurchaseOrder (Unit Test)", () => {
 
 
 });
+
+describe("getPurchaseOrderById (Controller)", () => {
+  let req, res;
+
+  beforeEach(() => {
+    req = mockRequest();
+    res = mockResponse();
+    jest.clearAllMocks();
+  });
+
+  test("Should return 400 if ID is missing", async () => {
+    req.params = {};
+    req.user = { uuid: "partner-uuid" };
+
+    await getPurchaseOrderById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ message: "Purchase Order ID is required" });
+  });
+
+  test("Should return 401 if user is not authenticated", async () => {
+    req.params = { id: "po-uuid" };
+    req.user = undefined;
+
+    await getPurchaseOrderById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ message: "Unauthorized" });
+  });
+
+  test("Should return 403 if PO does not belong to the user", async () => {
+    req.params = { id: "po-uuid" };
+    req.user = { uuid: "wrong-user" };
+
+    purchaseOrderService.getPartnerId.mockResolvedValue("actual-owner");
+
+    await getPurchaseOrderById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Forbidden: You do not have access to this purchase order"
+    });
+  });
+
+  test("Should return 404 if PO is not found", async () => {
+    req.params = { id: "not-found-id" };
+    req.user = { uuid: "partner-uuid" };
+
+    purchaseOrderService.getPartnerId.mockResolvedValue("partner-uuid");
+    purchaseOrderService.getPurchaseOrderById.mockRejectedValue(new Error("Purchase order not found"));
+
+    await getPurchaseOrderById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ message: "Purchase order not found" });
+  });
+
+  test("Should return 500 if unexpected error occurs", async () => {
+    req.params = { id: "some-id" };
+    req.user = { uuid: "partner-uuid" };
+
+    purchaseOrderService.getPartnerId.mockRejectedValue(new Error("DB is down"));
+
+    await getPurchaseOrderById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ message: "Internal server error" });
+  });
+
+  test("Should return 200 and the PO detail if all is valid", async () => {
+    req.params = { id: "po-uuid" };
+    req.user = { uuid: "partner-uuid" };
+
+    const mockPO = { id: "po-uuid", header: {}, items: [] };
+
+    purchaseOrderService.getPartnerId.mockResolvedValue("partner-uuid");
+    purchaseOrderService.getPurchaseOrderById.mockResolvedValue(mockPO);
+
+    await getPurchaseOrderById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(mockPO);
+  });
+});
+
