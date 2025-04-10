@@ -211,34 +211,50 @@ describe('PurchaseOrderService', () => {
     expect(console.error).toHaveBeenCalled();
   });
 
-  test('should get purchase order by id', async () => {
+  test('should get purchase order by id and resolve customer & vendor when IDs exist', async () => {
     const purchaseOrderId = 'test-order-id';
-    const mockPurchaseOrder = { id: purchaseOrderId, status: 'Completed' };
-    const mockFormattedResponse = { id: purchaseOrderId, status: 'Completed', formatted: true };
-    const mockItems = [];
-    const mockCustomer = null;
-    const mockVendor = null;
-    
+  
+    const mockPurchaseOrder = {
+      id: purchaseOrderId,
+      status: 'Completed',
+      customer_id: 'customer-uuid',
+      vendor_id: 'vendor-uuid'
+    };
+  
+    const mockItems = [{ description: "item 1", amount: 100 }];
+    const mockCustomer = { uuid: 'customer-uuid', name: 'Test Customer' };
+    const mockVendor = { uuid: 'vendor-uuid', name: 'Test Vendor' };
+  
+    const mockFormattedResponse = {
+      id: purchaseOrderId,
+      status: 'Completed',
+      formatted: true
+    };
+  
     // Setup mocks
     service.purchaseOrderRepository.findById.mockResolvedValue(mockPurchaseOrder);
-    service.getItems = jest.fn().mockResolvedValue(mockItems);
-    service.getCustomer = jest.fn().mockResolvedValue(mockCustomer);
-    service.getVendor = jest.fn().mockResolvedValue(mockVendor);
+    service.itemRepository.findItemsByDocumentId = jest.fn().mockResolvedValue(mockItems);
+    service.customerRepository.findById = jest.fn().mockResolvedValue(mockCustomer);
+    service.vendorRepository.findById = jest.fn().mockResolvedValue(mockVendor);
     service.responseFormatter.formatPurchaseOrderResponse.mockReturnValue(mockFormattedResponse);
-
-    // Call the method
+  
+    // Act
     const result = await service.getPurchaseOrderById(purchaseOrderId);
-
-    // Verify the expected behavior
+  
+    // Assert
     expect(service.purchaseOrderRepository.findById).toHaveBeenCalledWith(purchaseOrderId);
+    expect(service.itemRepository.findItemsByDocumentId).toHaveBeenCalledWith(purchaseOrderId, 'PurchaseOrder');
+    expect(service.customerRepository.findById).toHaveBeenCalledWith('customer-uuid');
+    expect(service.vendorRepository.findById).toHaveBeenCalledWith('vendor-uuid');
     expect(service.responseFormatter.formatPurchaseOrderResponse).toHaveBeenCalledWith(
-      mockPurchaseOrder, 
-      mockItems, 
-      mockCustomer, 
+      mockPurchaseOrder,
+      mockItems,
+      mockCustomer,
       mockVendor
     );
     expect(result).toEqual(mockFormattedResponse);
   });
+  
 
   test('should handle not found error when getting purchase order', async () => {
     const purchaseOrderId = 'non-existent-id';
