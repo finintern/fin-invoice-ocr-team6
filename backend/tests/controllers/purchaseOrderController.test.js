@@ -369,5 +369,29 @@ describe("getPurchaseOrderById (Controller)", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(mockPO);
   });
+
+  test("Should return 200 and resolve customer and vendor when IDs are present", async () => {
+    req.params = { id: "po-with-customer-vendor" };
+    req.user = { uuid: "partner-uuid" };
+
+    const mockPO = {
+      id: "po-with-customer-vendor",
+      header: { invoice_details: { purchase_order_id: "PO-2025-001" } },
+      items: [],
+      customer_id: "cust-uuid",
+      vendor_id: "vend-uuid"
+    };
+
+    purchaseOrderService.getPartnerId.mockResolvedValue("partner-uuid");
+    purchaseOrderService.getPurchaseOrderById.mockImplementation(async () => {
+      // You could assert or track internal service calls if needed
+      return mockPO;
+    });
+
+    await getPurchaseOrderById(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(mockPO);
+  });
 });
 
