@@ -23,8 +23,8 @@ router.get(
 );
 
 router.get(
-    '/:id/status', // New endpoint for getting invoice status
-    authMiddleware, // Ensure only authenticated users can access this
+    '/:id/status', // New endpoint for getting invoice statusE
+    authMiddleware,
     controller.getInvoiceStatus
 );
 

@@ -13,6 +13,7 @@ class InvoiceController extends FinancialDocumentController {
     // Bind methods to ensure correct context
     this.uploadInvoice = this.uploadInvoice.bind(this);
     this.getInvoiceById = this.getInvoiceById.bind(this);
+    this.getInvoiceStatus = this.getInvoiceStatus.bind(this);
     this.deleteInvoiceById = this.deleteInvoiceById.bind(this);
   }
 
@@ -132,6 +133,14 @@ class InvoiceController extends FinancialDocumentController {
   
       return res.status(200).json({ status });
     } catch (error) {
+      if (error.message === "Invoice not found") {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+  
+      if (error.message.includes("Forbidden")) {
+        return res.status(403).json({ message: "Forbidden: You do not have access to this invoice" });
+      }
+  
       return this.handleError(res, error);
     }
   }

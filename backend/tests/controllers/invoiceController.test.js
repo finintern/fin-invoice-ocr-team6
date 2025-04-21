@@ -258,88 +258,74 @@ describe("Invoice Controller", () => {
 
   describe("getInvoiceStatus", () => {
     test("should return 200 and the invoice status when authorized", async () => {
-      req = {
-        params: { id: "test-invoice-id" },
-        user: { uuid: "test-user-id" },
-      };
-      res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
+      const testData = setupTestData();
+      Object.assign(req, testData);
 
+      mockInvoiceService.getPartnerId.mockResolvedValue("test-uuid");
       mockInvoiceService.getInvoiceStatus.mockResolvedValue("Analyzed");
 
       await controller.getInvoiceStatus(req, res);
 
+      expect(mockInvoiceService.getPartnerId).toHaveBeenCalledWith("1");
+      expect(mockInvoiceService.getInvoiceStatus).toHaveBeenCalledWith("1");
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ status: "Analyzed" });
-      expect(mockInvoiceService.getInvoiceStatus).toHaveBeenCalledWith(
-        "test-invoice-id",
-        "test-user-id"
-      );
     });
 
     test("should return 404 when the invoice is not found", async () => {
-      req = {
-        params: { id: "test-invoice-id" },
-        user: { uuid: "test-user-id" },
-      };
-      res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
+      const testData = setupTestData();
+      Object.assign(req, testData);
 
-      mockInvoiceService.getInvoiceStatus.mockRejectedValue(
-        new Error("Invoice not found")
-      );
+      mockInvoiceService.getPartnerId.mockRejectedValue(new Error("Invoice not found"));
 
       await controller.getInvoiceStatus(req, res);
 
+      expect(mockInvoiceService.getPartnerId).toHaveBeenCalledWith("1");
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ message: "Invoice not found" });
     });
 
-    test("should return 403 when the user does not own the invoice", async () => {
-      req = {
-        params: { id: "test-invoice-id" },
-        user: { uuid: "test-user-id" },
-      };
-      res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
+    test("should return 403 when accessing another user's invoice", async () => {
+      const testData = setupTestData();
+      Object.assign(req, testData);
 
-      mockInvoiceService.getInvoiceStatus.mockRejectedValue(
-        new Error("Unauthorized: You do not own this invoice")
+      mockInvoiceService.getPartnerId.mockRejectedValue(
+        new Error("Forbidden: You do not have access to this invoice")
       );
 
       await controller.getInvoiceStatus(req, res);
 
+      expect(mockInvoiceService.getPartnerId).toHaveBeenCalledWith("1");
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({
-        message: "Unauthorized: You do not own this invoice",
+        message: "Forbidden: You do not have access to this invoice",
       });
     });
 
-    test("should return 500 for unexpected errors", async () => {
-      req = {
-        params: { id: "test-invoice-id" },
-        user: { uuid: "test-user-id" },
-      };
-      res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
+    test("should return 500 for unexpected internal server errors", async () => {
+      const testData = setupTestData();
+      Object.assign(req, testData);
 
-      mockInvoiceService.getInvoiceStatus.mockRejectedValue(
-        new Error("Internal server error")
-      );
+      mockInvoiceService.getPartnerId.mockRejectedValue(new Error("Internal server error"));
 
       await controller.getInvoiceStatus(req, res);
 
+      expect(mockInvoiceService.getPartnerId).toHaveBeenCalledWith("1");
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         message: "Internal server error",
+      });
+    });
+
+    test("should return 400 when invoice ID is null", async () => {
+      const testData = setupTestData({ params: { id: null } });
+      Object.assign(req, testData);
+
+      await controller.getInvoiceStatus(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Invoice ID is required",
       });
     });
   });
