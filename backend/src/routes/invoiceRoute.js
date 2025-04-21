@@ -22,6 +22,13 @@ router.get(
     controller.getInvoiceById
 );
 
+router.get(
+    '/:id/status', // New endpoint for getting invoice status
+    authMiddleware, // Ensure only authenticated users can access this
+    controller.getInvoiceStatus
+);
+
+
 // TODO: tanya ini apakah ga mau dikasih api limiter juga? 
 router.delete(
     '/:id', 

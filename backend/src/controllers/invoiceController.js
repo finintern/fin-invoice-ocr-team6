@@ -116,6 +116,26 @@ class InvoiceController extends FinancialDocumentController {
     }
   }
 
+  async getInvoiceStatus(req, res) {
+    try {
+      const { id } = req.params;
+  
+      // Validate the request and check authorization
+      await this.validateGetRequest(req, id);
+  
+      // Fetch the invoice status
+      const status = await this.service.getInvoiceStatus(id);
+  
+      if (!status) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+  
+      return res.status(200).json({ status });
+    } catch (error) {
+      return this.handleError(res, error);
+    }
+  }
+
   async validateGetRequest(req, id) {
     if (!req.user) {
       throw new AuthError("Unauthorized");
