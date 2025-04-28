@@ -1,6 +1,4 @@
 const multer = require('multer');
-const handleMulterError = require('./multerErrorHandler');
-
 // Basic multer setup
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -9,10 +7,7 @@ const upload = multer({
   }
 }).single('file');
 
-module.exports = async (req, res, next) => {
-  try {
-    upload(req, res, next); 
-  } catch (error) {
-    handleMulterError(error, req, res, next)
-  }
-}
+module.exports = (req, res, next) => {
+  // Pass the original next function directly to upload
+  upload(req, res, next);
+};
