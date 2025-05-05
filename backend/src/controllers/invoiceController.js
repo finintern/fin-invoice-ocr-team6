@@ -38,7 +38,7 @@ class InvoiceController extends FinancialDocumentController {
     const partnerId = req.user.uuid;
 
     Sentry.addBreadcrumb({
-      category: 'upload',
+      category: 'controller:invoice',
       message: 'Starting invoice upload process',
       data: {
         filename: originalname,
