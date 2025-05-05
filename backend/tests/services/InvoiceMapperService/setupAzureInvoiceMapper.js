@@ -1,4 +1,4 @@
-const { AzureInvoiceMapper } = require('../../../src/services/invoiceMapperService/invoiceMapperService');
+const MapperFactory = require('../../../src/services/mapperService/mapperFactory');
 
 /**  
  * @typedef {Object} MapperConfig  
@@ -8,10 +8,10 @@ const { AzureInvoiceMapper } = require('../../../src/services/invoiceMapperServi
 
 /**  
  * Creates a configured mapper instance for testing  
- * @returns {AzureInvoiceMapper}  
+ * @returns {Object} Invoice mapper instance  
  */  
 const createTestMapper = () => {  
-  const mapper = new AzureInvoiceMapper();  
+  const mapper = MapperFactory.createInvoiceMapper('azure');  
   mapper.generatePartnerId = function (vendorName) {  
     if (!vendorName) return 'unknown-vendor';  
     let partnerId = vendorName  

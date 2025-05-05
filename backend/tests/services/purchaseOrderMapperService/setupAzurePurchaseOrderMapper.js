@@ -1,4 +1,4 @@
-const { AzurePurchaseOrderMapper } = require('../../../src/services/purchaseOrderMapperService/purchaseOrderMapperService');
+const MapperFactory = require('../../../src/services/mapperService/mapperFactory');
 
 /**  
  * @typedef {Object} MapperConfig  
@@ -8,10 +8,10 @@ const { AzurePurchaseOrderMapper } = require('../../../src/services/purchaseOrde
 
 /**  
  * Creates a configured mapper instance for testing  
- * @returns {AzurePurchaseOrderMapper}  
+ * @returns {Object} Purchase order mapper instance
  */  
 const createTestMapper = () => {  
-  const mapper = new AzurePurchaseOrderMapper();  
+  const mapper = MapperFactory.createPurchaseOrderMapper('azure');  
   mapper.generatePartnerId = function (vendorName) {  
     if (!vendorName) return 'unknown-vendor';  
     let partnerId = vendorName  
