@@ -8,7 +8,8 @@ const ItemRepository = require('../../repositories/itemRepository.js');
 const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer');
 const PurchaseOrderValidator = require('./purchaseOrderValidator');
 const PurchaseOrderResponseFormatter = require('./purchaseOrderResponseFormatter');
-const { AzurePurchaseOrderMapper } = require('../purchaseOrderMapperService/purchaseOrderMapperService');
+// Update the import to use MapperFactory
+const MapperFactory = require('../mapperService/mapperFactory');
 const DocumentStatus = require('../../models/enums/DocumentStatus');
 const {NotFoundError } = require('../../utils/errors');
 
@@ -22,7 +23,8 @@ class PurchaseOrderService extends FinancialDocumentService {
     this.documentAnalyzer = new AzureDocumentAnalyzer();
     this.validator = new PurchaseOrderValidator();
     this.responseFormatter = new PurchaseOrderResponseFormatter();
-    this.azureMapper = new AzurePurchaseOrderMapper();
+    // Update to use MapperFactory instead of direct instantiation
+    this.azureMapper = MapperFactory.createPurchaseOrderMapper('azure');
   }
 
   async uploadPurchaseOrder(fileData) {

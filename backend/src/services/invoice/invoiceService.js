@@ -10,7 +10,7 @@ const ItemRepository = require('../../repositories/itemRepository.js');
 const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer.js');
 const InvoiceValidator = require('./invoiceValidator.js');
 const InvoiceResponseFormatter = require('./invoiceResponseFormatter.js');
-const { AzureInvoiceMapper } = require('../invoiceMapperService/invoiceMapperService.js');
+const MapperFactory = require('../mapperService/mapperFactory.js');
 const DocumentStatus = require('../../models/enums/DocumentStatus.js');
 const { NotFoundError } = require('../../utils/errors.js');
 
@@ -29,7 +29,7 @@ class InvoiceService extends FinancialDocumentService {
     this.documentAnalyzer = dependencies.documentAnalyzer || new AzureDocumentAnalyzer();
     this.validator = dependencies.validator || new InvoiceValidator();
     this.responseFormatter = dependencies.responseFormatter || new InvoiceResponseFormatter();
-    this.azureMapper = dependencies.azureMapper || new AzureInvoiceMapper();
+    this.azureMapper = dependencies.azureMapper || MapperFactory.createInvoiceMapper('azure');
     
     // Logger menggunakan nilai default jika tidak ada
     this.logger = dependencies.logger || this.logger;
@@ -350,7 +350,7 @@ function createInvoiceService(customDependencies = {}) {
   const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer');
   const InvoiceValidator = require('./invoiceValidator');
   const InvoiceResponseFormatter = require('./invoiceResponseFormatter');
-  const { AzureInvoiceMapper } = require('../invoiceMapperService/invoiceMapperService');
+  const MapperFactory = require('../mapperService/mapperFactory');
   const InvoiceLogger = require('./invoiceLogger');
   const s3Service = require('../s3Service');
   
@@ -363,7 +363,7 @@ function createInvoiceService(customDependencies = {}) {
     documentAnalyzer: new AzureDocumentAnalyzer(),
     validator: new InvoiceValidator(),
     responseFormatter: new InvoiceResponseFormatter(),
-    azureMapper: new AzureInvoiceMapper(),
+    azureMapper: MapperFactory.createInvoiceMapper('azure'),
     logger: InvoiceLogger,
     s3Service: s3Service,
     ...customDependencies
