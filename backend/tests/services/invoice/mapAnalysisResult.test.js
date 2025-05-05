@@ -1,11 +1,10 @@
 const invoiceService = require('../../../src/services/invoice/invoiceService');
-const { AzureInvoiceMapper } = require('../../../src/services/invoiceMapperService/invoiceMapperService');
+const MapperFactory = require('../../../src/services/mapperService/mapperFactory');
 
-
-// Mock the invoiceMapperService
-jest.mock('../../../src/services/invoiceMapperService/invoiceMapperService', () => {
+// Mock the MapperFactory
+jest.mock('../../../src/services/mapperService/mapperFactory', () => {
   return {
-    AzureInvoiceMapper: jest.fn().mockImplementation(() => {
+    createInvoiceMapper: jest.fn().mockImplementation(() => {
       return {
         mapToInvoiceModel: jest.fn((data, partnerId) => {
           // This mock implementation should match the behavior of the real implementation
@@ -45,8 +44,8 @@ describe('mapAnalysisResult method', () => {
     // Clear mocks between tests
     jest.clearAllMocks();
     
-    // Ensure we're using our mocked mapper
-    invoiceService.azureMapper = new AzureInvoiceMapper();
+    // Ensure we're using our mocked mapper with the factory pattern
+    invoiceService.azureMapper = MapperFactory.createInvoiceMapper('azure');
   });
 
   afterAll(() => {

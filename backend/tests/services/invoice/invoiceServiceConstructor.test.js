@@ -6,7 +6,7 @@ const ItemRepository = require('../../../src/repositories/itemRepository');
 const AzureDocumentAnalyzer = require('../../../src/services/analysis/azureDocumentAnalyzer');
 const InvoiceValidator = require('../../../src/services/invoice/invoiceValidator');
 const InvoiceResponseFormatter = require('../../../src/services/invoice/invoiceResponseFormatter');
-const { AzureInvoiceMapper } = require('../../../src/services/invoiceMapperService/invoiceMapperService');
+const MapperFactory = require('../../../src/services/mapperService/mapperFactory');
 
 // Mock all dependencies
 jest.mock('../../../src/repositories/invoiceRepository');
@@ -16,8 +16,8 @@ jest.mock('../../../src/repositories/itemRepository');
 jest.mock('../../../src/services/analysis/azureDocumentAnalyzer');
 jest.mock('../../../src/services/invoice/invoiceValidator');
 jest.mock('../../../src/services/invoice/invoiceResponseFormatter');
-jest.mock('../../../src/services/invoiceMapperService/invoiceMapperService', () => ({
-    AzureInvoiceMapper: jest.fn()
+jest.mock('../../../src/services/mapperService/mapperFactory', () => ({
+    createInvoiceMapper: jest.fn().mockReturnValue({ mapToInvoiceModel: jest.fn() })
 }));
 jest.mock('../../../src/services/s3Service');
 
@@ -39,7 +39,8 @@ describe('InvoiceService Constructor', () => {
         expect(AzureDocumentAnalyzer).toHaveBeenCalledTimes(1);
         expect(InvoiceValidator).toHaveBeenCalledTimes(1);
         expect(InvoiceResponseFormatter).toHaveBeenCalledTimes(1);
-        expect(AzureInvoiceMapper).toHaveBeenCalledTimes(1);
+        expect(MapperFactory.createInvoiceMapper).toHaveBeenCalledTimes(1);
+        expect(MapperFactory.createInvoiceMapper).toHaveBeenCalledWith('azure');
     });
 
     test('should create instance with default dependencies when empty object provided', () => {
@@ -54,7 +55,8 @@ describe('InvoiceService Constructor', () => {
         expect(AzureDocumentAnalyzer).toHaveBeenCalledTimes(1);
         expect(InvoiceValidator).toHaveBeenCalledTimes(1);
         expect(InvoiceResponseFormatter).toHaveBeenCalledTimes(1);
-        expect(AzureInvoiceMapper).toHaveBeenCalledTimes(1);
+        expect(MapperFactory.createInvoiceMapper).toHaveBeenCalledTimes(1);
+        expect(MapperFactory.createInvoiceMapper).toHaveBeenCalledWith('azure');
     });
 
     test('should use provided dependencies when they are supplied', () => {
@@ -82,7 +84,8 @@ describe('InvoiceService Constructor', () => {
         expect(ItemRepository).toHaveBeenCalledTimes(1);
         expect(AzureDocumentAnalyzer).toHaveBeenCalledTimes(1);
         expect(InvoiceResponseFormatter).toHaveBeenCalledTimes(1);
-        expect(AzureInvoiceMapper).toHaveBeenCalledTimes(1);
+        expect(MapperFactory.createInvoiceMapper).toHaveBeenCalledTimes(1);
+        expect(MapperFactory.createInvoiceMapper).toHaveBeenCalledWith('azure');
 
         // Check that the service has the correct dependencies
         expect(service.invoiceRepository).toBe(mockInvoiceRepo);
@@ -107,6 +110,7 @@ describe('InvoiceService Constructor', () => {
 
     test('should use all custom dependencies when all are provided', () => {
         // Arrange
+        const mockAzureMapper = { mapToInvoiceModel: jest.fn() };
         const mockDependencies = {
             invoiceRepository: { findById: jest.fn() },
             customerRepository: { findByAttributes: jest.fn() },
@@ -115,7 +119,7 @@ describe('InvoiceService Constructor', () => {
             documentAnalyzer: { analyzeDocument: jest.fn() },
             validator: { validateFileData: jest.fn() },
             responseFormatter: { formatInvoiceResponse: jest.fn() },
-            azureMapper: { mapToInvoiceModel: jest.fn() },
+            azureMapper: mockAzureMapper,
             logger: { logUploadStart: jest.fn() },
             s3Service: { uploadFile: jest.fn() }
         };
@@ -131,7 +135,7 @@ describe('InvoiceService Constructor', () => {
         expect(AzureDocumentAnalyzer).not.toHaveBeenCalled();
         expect(InvoiceValidator).not.toHaveBeenCalled();
         expect(InvoiceResponseFormatter).not.toHaveBeenCalled();
-        expect(AzureInvoiceMapper).not.toHaveBeenCalled();
+        expect(MapperFactory.createInvoiceMapper).not.toHaveBeenCalled();
 
         // Check that the service has the custom dependencies
         expect(service.invoiceRepository).toBe(mockDependencies.invoiceRepository);
@@ -141,7 +145,7 @@ describe('InvoiceService Constructor', () => {
         expect(service.documentAnalyzer).toBe(mockDependencies.documentAnalyzer);
         expect(service.validator).toBe(mockDependencies.validator);
         expect(service.responseFormatter).toBe(mockDependencies.responseFormatter);
-        expect(service.azureMapper).toBe(mockDependencies.azureMapper);
+        expect(service.azureMapper).toBe(mockAzureMapper);
         expect(service.logger).toBe(mockDependencies.logger);
     });
 });

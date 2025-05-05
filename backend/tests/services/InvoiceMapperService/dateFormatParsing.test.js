@@ -1,8 +1,8 @@
-const { AzureInvoiceMapper } = require('../../../src/services/invoiceMapperService/invoiceMapperService');
+const MapperFactory = require('../../../src/services/mapperService/mapperFactory');
 
 describe("Date Format Parsing", () => {
     it('should correctly handle DD/MM/YY date format', () => {
-      const mapper = new AzureInvoiceMapper();
+      const mapper = MapperFactory.createInvoiceMapper('azure');
       
       // Test DD/MM/YY format (28/02/25 should be Feb 28, 2025)
       const dateDDMMYY = mapper.fieldParser.parseDate({ content: '28/02/25' });
@@ -24,7 +24,7 @@ describe("Date Format Parsing", () => {
     });
     
     it('should correctly handle DD/MM/YYYY date format', () => {
-      const mapper = new AzureInvoiceMapper();
+      const mapper = MapperFactory.createInvoiceMapper('azure');
       
       // Test DD/MM/YYYY format
       const dateDDMMYYYY = mapper.fieldParser.parseDate({ content: '28/02/2025' });
@@ -40,7 +40,7 @@ describe("Date Format Parsing", () => {
     });
     
     it('should correctly handle invalid date formats by using current date', () => {
-      const mapper = new AzureInvoiceMapper();
+      const mapper = MapperFactory.createInvoiceMapper('azure');
       
       // Mock date.now to have consistent test results
       const now = new Date('2025-01-01T12:00:00Z');

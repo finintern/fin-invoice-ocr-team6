@@ -1,11 +1,10 @@
 const purchaseOrderService = require('../../../src/services/purchaseOrder/purchaseOrderService');
-const { AzurePurchaseOrderMapper } = require('../../../src/services/purchaseOrderMapperService/purchaseOrderMapperService');
+const MapperFactory = require('../../../src/services/mapperService/mapperFactory');
 
-
-// Mock the purchaseOrderMapperService
-jest.mock('../../../src/services/purchaseOrderMapperService/purchaseOrderMapperService', () => {
+// Mock the MapperFactory
+jest.mock('../../../src/services/mapperService/mapperFactory', () => {
   return {
-    AzurePurchaseOrderMapper: jest.fn().mockImplementation(() => {
+    createPurchaseOrderMapper: jest.fn().mockImplementation(() => {
       return {
         mapToPurchaseOrderModel: jest.fn((data, partnerId) => {
           // This mock implementation should match the behavior of the real implementation
@@ -44,7 +43,7 @@ describe('mapAnalysisResult method for Purchase Orders', () => {
     jest.clearAllMocks();
     
     // Ensure we're using our mocked mapper
-    purchaseOrderService.azureMapper = new AzurePurchaseOrderMapper();
+    purchaseOrderService.azureMapper = MapperFactory.createPurchaseOrderMapper('azure');
   });
 
   afterAll(() => {

@@ -1,4 +1,4 @@
-const { AzureInvoiceMapper } = require('../../../src/services/invoiceMapperService/invoiceMapperService');
+const MapperFactory = require('../../../src/services/mapperService/mapperFactory');
 const { getMapper, partnerId } = require('./setupAzureInvoiceMapper');
 
 describe('Field Parsing', () => {
@@ -93,7 +93,7 @@ describe('Field Parsing', () => {
       expect(mapper.fieldParser.parseCurrency(null)).toEqual({ amount: null, currency: { currencySymbol: null, currencyCode: null } });
     });
     it('should correctly parse Rupiah currency format', () => {
-      const mapper = new AzureInvoiceMapper();
+      const mapper = MapperFactory.createInvoiceMapper('azure');
       
       // Test structured currency field with Rupiah content
       const rupiahField = {
