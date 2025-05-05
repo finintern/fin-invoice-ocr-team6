@@ -1946,6 +1946,204 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "Delete Invoice",
+			"item": [
+				{
+					"name": "Upload Invoice for Delete",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Test for status code",
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Test for content type",
+									"pm.test(\"Content-Type is present and is application/json\", function () {",
+									"    pm.response.to.have.header(\"Content-Type\");",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+									"});",
+									"",
+									"// Test for message and invoice details",
+									"pm.test(\"Response contains message and invoice details\", function () {",
+									"    pm.expect(pm.response.json().message.message).to.equal(\"Invoice upload initiated\");",
+									"    pm.expect(pm.response.json().message.id).to.exist;",
+									"});",
+									"",
+									"// Store the invoice ID for deletion test",
+									"if (pm.response.json().message && pm.response.json().message.id) {",
+									"    pm.collectionVariables.set(\"invoice_id_to_delete\", pm.response.json().message.id);",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "client_id",
+								"value": "{{client_id}}",
+								"type": "text"
+							},
+							{
+								"key": "client_secret",
+								"value": "{{client_secret}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "test-valid.pdf"
+								},
+								{
+									"key": "skipAnalysis",
+									"value": "true",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/invoices/upload",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"invoices",
+								"upload"
+							]
+						},
+						"description": "Upload invoice for deletion test with skipAnalysis=true parameter."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Invoice Successful",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Test for status code",
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Test for content type",
+									"pm.test(\"Content-Type is present and is application/json\", function () {",
+									"    pm.response.to.have.header(\"Content-Type\");",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+									"});",
+									"",
+									"// Test for success message",
+									"pm.test(\"Response contains success message\", function () {",
+									"    pm.expect(pm.response.json().message).to.equal(\"Invoice successfully deleted\");",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "client_id",
+								"value": "{{client_id}}",
+								"type": "text"
+							},
+							{
+								"key": "client_secret",
+								"value": "{{client_secret}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/invoices/{{invoice_id_to_delete}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"invoices",
+								"{{invoice_id_to_delete}}"
+							]
+						},
+						"description": "Delete invoice using the ID obtained from the upload."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Invoice Not Found",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Test for status code",
+									"pm.test(\"Status code is 404\", function () {",
+									"    pm.response.to.have.status(404);",
+									"});",
+									"",
+									"// Test for content type",
+									"pm.test(\"Content-Type is present and is application/json\", function () {",
+									"    pm.response.to.have.header(\"Content-Type\");",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+									"});",
+									"",
+									"// Test for not found message",
+									"pm.test(\"Response contains not found message\", function () {",
+									"    pm.expect(pm.response.json().message).to.equal(\"Invoice not found\");",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "client_id",
+								"value": "{{client_id}}",
+								"type": "text"
+							},
+							{
+								"key": "client_secret",
+								"value": "{{client_secret}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/invoices/{{invoice_id_to_delete}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"invoices",
+								"{{invoice_id_to_delete}}"
+							]
+						},
+						"description": "Attempt to delete an invoice that has already been deleted."
+					},
+					"response": []
+				}
+			],
+			"description": "Tests for deleting invoices."
 		}
 	],
 	"event": [
