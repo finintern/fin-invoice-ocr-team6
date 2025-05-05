@@ -263,6 +263,7 @@ describe('uploadInvoice - Corner Cases', () => {
 
     await expect(invoiceService.uploadInvoice(mockParams)).rejects.toThrow('Failed to process invoice: Failed to upload file to S3');
   });
+<<<<<<< HEAD
 
   // Updated test for handling missing vendor
   test("Should handle case where vendor_id exists but vendor isn't found", async () => {
@@ -410,4 +411,6 @@ describe('uploadInvoice with skipAnalysis option', () => {
       false // skipAnalysis parameter defaults to false
     );
   });
+=======
+>>>>>>> 770822b2d0df9f4691c178c0159376f1f2860b16
 });
