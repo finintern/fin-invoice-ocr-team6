@@ -34,7 +34,7 @@ class DocumentMapper {
    * @param {string} partnerId - Partner ID
    * @returns {Object} Data ready for database
    */
-  mapToModel(ocrResult, partnerId) {
+  mapToModel(_ocrResult, _partnerId) {
     throw new Error('Method not implemented');
   }
 
@@ -73,7 +73,7 @@ class InvoiceMapper extends DocumentMapper {
    * @param {string} partnerId - Partner ID
    * @returns {Object} Invoice data ready for database
    */
-  mapToInvoiceModel(ocrResult, partnerId) {
+  mapToInvoiceModel(_ocrResult, _partnerId) {
     throw new Error('Method not implemented');
   }
 }
@@ -97,7 +97,7 @@ class PurchaseOrderMapper extends DocumentMapper {
    * @param {string} partnerId - Partner ID
    * @returns {Object} Purchase Order data ready for database
    */
-  mapToPurchaseOrderModel(ocrResult, partnerId) {
+  mapToPurchaseOrderModel(_ocrResult, _partnerId) {
     throw new Error('Method not implemented');
   }
 }

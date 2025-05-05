@@ -1,7 +1,5 @@
 'use strict';
 
-const { InvoiceMapper, PurchaseOrderMapper } = require('./baseMapper');
-
 /**
  * Factory class for creating document mappers
  */
