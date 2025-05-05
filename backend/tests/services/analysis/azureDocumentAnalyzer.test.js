@@ -218,17 +218,17 @@ describe('Azure Document Analyzer', () => {
       // Assert
       expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(3); // Start, analyze, complete
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expect.objectContaining({
-        category: "documentAnalysis",
+        category: "service:azure",
         message: "Starting document analysis for: https://example.com/invoice.pdf",
         level: "info"
       }));
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expect.objectContaining({
-        category: "documentAnalysis",
+        category: "service:azure",
         message: "Azure analysis started...",
         level: "info"
       }));
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expect.objectContaining({
-        category: "documentAnalysis",
+        category: "service:azure",
         message: "Azure analysis completed successfully",
         level: "info"
       }));
@@ -250,7 +250,7 @@ describe('Azure Document Analyzer', () => {
       // Assert
       expect(Sentry.captureException).toHaveBeenCalledWith(mockError);
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expect.objectContaining({
-        category: "documentAnalysis",
+        category: "service:azure",
         message: "Error encountered: Test Error",
         level: "error"
       }));
