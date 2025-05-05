@@ -7,7 +7,7 @@ module.exports = async (req, res, next) => {
     const { client_id, client_secret } = req.headers;
 
     Sentry.addBreadcrumb({
-      category: 'auth',
+      category: 'middleware:auth',
       message: `Authentication attempt for client_id: ${client_id}`,
       level: 'info'
     });
