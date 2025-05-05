@@ -2,6 +2,8 @@
 
 const AzurePurchaseOrderMapper = require('../../../src/services/modelImplementations/azurePurchaseOrderMapper');
 const DocumentStatus = require('../../../src/models/enums/DocumentStatus');
+const FieldParser = require('../../../src/services/invoiceMapperService/FieldParserService');
+const EntityExtractor = require('../../../src/services/invoiceMapperService/entityExtractorService');
 
 // Mock dependencies
 jest.mock('../../../src/services/invoiceMapperService/FieldParserService', () => {
@@ -183,6 +185,77 @@ describe('AzurePurchaseOrderMapper', () => {
       
       // Should have correctly used the alternate field names
       expect(purchaseOrderData.po_number).toBe('PO-ALT-2023');
+    });
+  });
+});
+
+// Mock the dependencies to verify they are instantiated
+jest.mock('../../../src/services/invoiceMapperService/FieldParserService');
+jest.mock('../../../src/services/invoiceMapperService/entityExtractorService');
+
+describe('AzurePurchaseOrderMapper', () => {
+  beforeEach(() => {
+    // Clear all instances and calls to constructor and methods
+    jest.clearAllMocks();
+    
+    // Set up the mock implementations
+    FieldParser.mockImplementation(() => ({
+      getFieldContent: jest.fn(),
+      parseDate: jest.fn(),
+      parseCurrency: jest.fn()
+    }));
+    
+    EntityExtractor.mockImplementation(() => ({
+      extractLineItems: jest.fn(),
+      extractCustomerData: jest.fn(),
+      extractVendorData: jest.fn()
+    }));
+  });
+  
+  describe('constructor', () => {
+    it('should initialize with default model type and create dependencies', () => {
+      // This test specifically targets line 16 which creates the EntityExtractor
+      const mapper = new AzurePurchaseOrderMapper();
+      
+      // Verify constructor calls
+      expect(FieldParser).toHaveBeenCalled();
+      expect(EntityExtractor).toHaveBeenCalled();
+      
+      // Verify model type
+      expect(mapper.modelType).toBe('azure');
+      
+      // Verify dependencies are created
+      expect(mapper.fieldParser).toBeDefined();
+      expect(mapper.EntityExtractor).toBeDefined();
+    });
+    
+    it('should initialize with custom model type', () => {
+      const mapper = new AzurePurchaseOrderMapper('custom-azure');
+      
+      // Verify model type is set but still creates Azure-specific dependencies
+      expect(mapper.modelType).toBe('custom-azure');
+      expect(FieldParser).toHaveBeenCalled();
+      expect(EntityExtractor).toHaveBeenCalled();
+    });
+  });
+  
+  // Minimal test for the mapToModel method to ensure complete coverage
+  describe('mapToModel', () => {
+    it('should call mapToPurchaseOrderModel with the same parameters', () => {
+      const mapper = new AzurePurchaseOrderMapper();
+      
+      // Spy on the mapToPurchaseOrderModel method
+      const spy = jest.spyOn(mapper, 'mapToPurchaseOrderModel').mockReturnValue({});
+      
+      const ocrResult = {};
+      const partnerId = 'test-partner';
+      
+      mapper.mapToModel(ocrResult, partnerId);
+      
+      expect(spy).toHaveBeenCalledWith(ocrResult, partnerId);
+      
+      // Restore the original method
+      spy.mockRestore();
     });
   });
 });

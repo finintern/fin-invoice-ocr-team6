@@ -2,6 +2,8 @@
 
 const AzureInvoiceMapper = require('../../../src/services/modelImplementations/azureInvoiceMapper');
 const DocumentStatus = require('../../../src/models/enums/DocumentStatus');
+const FieldParser = require('../../../src/services/invoiceMapperService/FieldParserService');
+const EntityExtractor = require('../../../src/services/invoiceMapperService/entityExtractorService');
 
 // Mock dependencies
 jest.mock('../../../src/services/invoiceMapperService/FieldParserService', () => {
@@ -163,6 +165,58 @@ describe('AzureInvoiceMapper', () => {
       // Currency fields should be set from the mocks
       expect(invoiceData.currency_symbol).toBe(null);
       expect(invoiceData.currency_code).toBe(null);
+    });
+  });
+});
+
+// Mock the dependencies to verify they are instantiated
+jest.mock('../../../src/services/invoiceMapperService/FieldParserService');
+jest.mock('../../../src/services/invoiceMapperService/entityExtractorService');
+
+describe('AzureInvoiceMapper', () => {
+  beforeEach(() => {
+    // Clear all instances and calls to constructor and methods
+    jest.clearAllMocks();
+    
+    // Set up the mock implementations
+    FieldParser.mockImplementation(() => ({
+      getFieldContent: jest.fn(),
+      parseDate: jest.fn(),
+      parseCurrency: jest.fn(),
+      calculateDueDate: jest.fn()
+    }));
+    
+    EntityExtractor.mockImplementation(() => ({
+      extractLineItems: jest.fn(),
+      extractCustomerData: jest.fn(),
+      extractVendorData: jest.fn()
+    }));
+  });
+  
+  describe('constructor', () => {
+    it('should initialize with default model type and create dependencies', () => {
+      // This test specifically targets line 16 which creates the EntityExtractor
+      const mapper = new AzureInvoiceMapper();
+      
+      // Verify constructor calls
+      expect(FieldParser).toHaveBeenCalled();
+      expect(EntityExtractor).toHaveBeenCalled();
+      
+      // Verify model type
+      expect(mapper.modelType).toBe('azure');
+      
+      // Verify dependencies are created
+      expect(mapper.fieldParser).toBeDefined();
+      expect(mapper.EntityExtractor).toBeDefined();
+    });
+    
+    it('should initialize with custom model type', () => {
+      const mapper = new AzureInvoiceMapper('custom-azure');
+      
+      // Verify model type is set but still creates Azure-specific dependencies
+      expect(mapper.modelType).toBe('custom-azure');
+      expect(FieldParser).toHaveBeenCalled();
+      expect(EntityExtractor).toHaveBeenCalled();
     });
   });
 });
