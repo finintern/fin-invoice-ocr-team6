@@ -38,6 +38,10 @@ const mockSpawn = (exitCode = 0, stderrData = '') => {
   };
 };
 
+const mockExecQPdfAvailable = (callback) => {
+  callback(null, 'QPDF version 10.6.3', '');
+  return { on: jest.fn() };
+}; 
 
 describe('QpdfDecryption', () => {
   let qpdfDecryption;
@@ -45,16 +49,10 @@ describe('QpdfDecryption', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     
-    // Default exec mock that simulates QPDF availability
-    exec.mockImplementation((command, callback) => {
-      callback(null, 'QPDF version 10.6.3', '');
-      return { on: jest.fn() };
-    });
+    exec.mockImplementation((command, callback) => mockExecQPdfAvailable(callback)); 
     spawn.mockImplementation(() => mockSpawn(0));
     
     qpdfDecryption = new QpdfDecryption();
-    
-    // Set qpdf as available for most tests
     qpdfDecryption.isQpdfAvailable = true;
   });
   
@@ -168,10 +166,4 @@ describe('QpdfDecryption', () => {
     expect(qpdfDecryption).toBeInstanceOf(PDFDecryptionStrategy);
   });
 
-  // test ('handle password input validation potentially dangeroud input', () => {
-  //   const pdfBuffer = Buffer.from('encrypted pdf content');
-  //   const password = 'password123';
-
-  //   qpdfDecryption.decrypt(pdfBuffer, password); 
-  // })
 });
