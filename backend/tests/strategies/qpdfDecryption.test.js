@@ -1,10 +1,13 @@
 const QpdfDecryption = require('../../src/strategies/qpdfDecryption');
 const PDFDecryptionStrategy = require('../../src/strategies/pdfDecryptionStrategy');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { spawn, exec } = require('child_process');
 
 // Mock dependencies
-jest.mock('child_process', () => ({ exec: jest.fn() }));
+jest.mock('child_process', () => ({ 
+  spawn: jest.fn(), 
+  exec: jest.fn()
+ }));
 jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
   writeFileSync: jest.fn(),
@@ -14,6 +17,27 @@ jest.mock('fs', () => ({
   rmSync: jest.fn(),
   lstatSync: jest.fn().mockReturnValue({ isDirectory: jest.fn().mockReturnValue(false) })
 }));
+
+const mockSpawn = (exitCode = 0, stderrData = '') => {
+  const stdout = { on: jest.fn() };
+  const stderr = {
+    on: jest.fn((event, callback) => {
+      if (event === 'data' && stderrData) {
+        callback(Buffer.from(stderrData));
+      }
+    })
+  };
+  return {
+    stdout,
+    stderr,
+    on: jest.fn((event, callback) => {
+      if (event === 'close') {
+        callback(exitCode);
+      }
+    })
+  };
+};
+
 
 describe('QpdfDecryption', () => {
   let qpdfDecryption;
@@ -26,6 +50,7 @@ describe('QpdfDecryption', () => {
       callback(null, 'QPDF version 10.6.3', '');
       return { on: jest.fn() };
     });
+    spawn.mockImplementation(() => mockSpawn(0));
     
     qpdfDecryption = new QpdfDecryption();
     
@@ -58,19 +83,19 @@ describe('QpdfDecryption', () => {
   
   test('execCommand functionality', async () => {
     // Success case
-    await expect(qpdfDecryption.execCommand('qpdf --decrypt')).resolves.not.toThrow();
+    spawn.mockImplementation(() => mockSpawn(0));
+    await expect(qpdfDecryption.execCommand('qpdf', ['--decrypt'])).resolves.toBeUndefined();
+
     
     // QPDF not available
     qpdfDecryption.isQpdfAvailable = false;
-    await expect(qpdfDecryption.execCommand('qpdf --decrypt')).rejects.toThrow('QPDF is not installed');
+    spawn.mockImplementation(() => mockSpawn(1, 'QPDF is not installed'));
+    await expect(qpdfDecryption.execCommand('qpdf', ['--decrypt'])).rejects.toThrow('QPDF is not installed');
     
     // Command failure
     qpdfDecryption.isQpdfAvailable = true;
-    exec.mockImplementation((command, callback) => {
-      callback(new Error('Command failed'), '', 'Error output');
-      return { on: jest.fn() };
-    });
-    await expect(qpdfDecryption.execCommand('qpdf --decrypt')).rejects.toThrow('Failed to decrypt PDF: Error output');
+    spawn.mockImplementation(() => mockSpawn(1, 'Error output'));
+    await expect(qpdfDecryption.execCommand('qpdf', ['--decrypt'])).rejects.toThrow('Failed to decrypt PDF: Error output');
   });
   
   test('decrypt method scenarios', async () => {
@@ -87,7 +112,7 @@ describe('QpdfDecryption', () => {
     const result = await qpdfDecryption.decrypt(pdfBuffer, password);
     expect(fs.mkdirSync).toHaveBeenCalled();
     expect(fs.writeFileSync).toHaveBeenCalled();
-    expect(qpdfDecryption.execCommand).toHaveBeenCalledWith(expect.stringContaining(`--password=${password} --decrypt`));
+    expect(qpdfDecryption.execCommand).toHaveBeenCalledWith('qpdf', expect.arrayContaining([`--password=${password}`, '--decrypt']));
     expect(result).toEqual(Buffer.from('decrypted pdf content'));
     
     // Output file missing
@@ -142,4 +167,11 @@ describe('QpdfDecryption', () => {
   test('class inheritance', () => {
     expect(qpdfDecryption).toBeInstanceOf(PDFDecryptionStrategy);
   });
+
+  // test ('handle password input validation potentially dangeroud input', () => {
+  //   const pdfBuffer = Buffer.from('encrypted pdf content');
+  //   const password = 'password123';
+
+  //   qpdfDecryption.decrypt(pdfBuffer, password); 
+  // })
 });
