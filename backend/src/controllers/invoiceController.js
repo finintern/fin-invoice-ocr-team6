@@ -1,8 +1,8 @@
 const FinancialDocumentController = require('./financialDocumentController');
 const Sentry = require("../instrument");
 const { ValidationError, AuthError, ForbiddenError } = require('../utils/errors');
-const { from, of, throwError } = require('rxjs');
-const { catchError, mergeMap, tap } = require('rxjs/operators');
+const { from, of, EMPTY, throwError } = require('rxjs');
+const { catchError, mergeMap, tap, switchMap, map} = require('rxjs/operators');
 
 class InvoiceController extends FinancialDocumentController {
   /**
@@ -36,6 +36,22 @@ class InvoiceController extends FinancialDocumentController {
   async processUpload(req) {
     const { buffer, originalname, mimetype } = req.file;
     const partnerId = req.user.uuid;
+    
+    // Fix the skipAnalysis check to handle parameter name with spaces
+    let skipAnalysis = false;
+    
+    // Check req.body exists and is an object
+    if (req.body && typeof req.body === 'object') {
+      // Look for any parameter that matches skipAnalysis (case insensitive, allowing for spaces)
+      Object.keys(req.body).forEach(key => {
+        const normalizedKey = key.trim().toLowerCase();
+        if (normalizedKey === 'skipanalysis' && req.body[key] === 'true') {
+          skipAnalysis = true;
+        }
+      });
+    }
+
+    console.log("Skip analysis parameter detected:", skipAnalysis);
 
     Sentry.addBreadcrumb({
       category: 'controller:invoice',
@@ -43,7 +59,8 @@ class InvoiceController extends FinancialDocumentController {
       data: {
         filename: originalname,
         partnerId,
-        fileSize: buffer.length
+        fileSize: buffer.length,
+        skipAnalysis
       }
     });
 
@@ -53,13 +70,14 @@ class InvoiceController extends FinancialDocumentController {
         originalname,
         mimetype,
         partnerId
-      });
+      }, skipAnalysis);
 
       Sentry.captureMessage('Invoice upload successful', {
         level: 'info',
         extra: {
           invoiceId: result.invoiceId,
-          partnerId
+          partnerId,
+          skipAnalysis
         }
       });
 
@@ -69,25 +87,31 @@ class InvoiceController extends FinancialDocumentController {
         extra: {
           filename: originalname,
           partnerId,
-          fileSize: buffer.length
+          fileSize: buffer.length,
+          skipAnalysis
         }
       });
       throw error;
     }
   }
 
-  async getInvoiceById(req, res) {
-    try {
-      const { id } = req.params;
-      await this.validateGetRequest(req, id);
-      const invoiceDetail = await this.service.getInvoiceById(id);
-      if (!invoiceDetail) {
-        return res.status(404).json({ message: "Invoice not found" });
-      }
-      return res.status(200).json(invoiceDetail);
-    } catch (error) {
-      return this.handleError(res, error);
-    }
+  getInvoiceById(req, res) {
+    const { id } = req.params;
+  
+    from(this.validateGetRequest(req, id)).pipe(
+      switchMap(() => from(this.service.getInvoiceById(id))),
+      map((invoiceDetail) => {
+        console.log("Invoice detail:", invoiceDetail);
+        if (!invoiceDetail) {
+          return res.status(404).json({ message: "Invoice not found" });
+        }
+        return res.status(200).json(invoiceDetail);
+      }),
+      catchError((error) => {
+        this.handleError(res, error);
+        return EMPTY; 
+      })
+    ).subscribe();
   }
 
   async validateGetRequest(req, id) {
