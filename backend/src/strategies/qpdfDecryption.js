@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 
 class qpdfDecryption extends PDFDecryptionStrategy {
     constructor() {
@@ -21,7 +21,7 @@ class qpdfDecryption extends PDFDecryptionStrategy {
         });
     }
 
-    async execCommand(command) {
+    async execCommand(command, args) {
         // Check if qpdf is available before executing the command
         if (!this.isQpdfAvailable) {
             throw new Error(
@@ -33,8 +33,15 @@ class qpdfDecryption extends PDFDecryptionStrategy {
         }
 
         return new Promise((resolve, reject) => {
-            exec(command, (error, stdout, stderr) => {
-                if (error) {
+            const process = spawn(command, args);
+    
+            let stderr = '';
+            process.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+    
+            process.on('close', (code) => {
+                if (code !== 0) {
                     reject(new Error(`Failed to decrypt PDF: ${stderr.trim()}`));
                 } else {
                     resolve();
@@ -47,6 +54,17 @@ class qpdfDecryption extends PDFDecryptionStrategy {
         if (!Buffer.isBuffer(pdfBuffer)) {
             throw new Error('Invalid input: Expected a Buffer.');
         }
+
+        // // Validate password - reject potentially dangerous inputs
+        // if (typeof password !== 'string') {
+        //     throw new Error('Invalid password: Expected a string.');
+        // }
+        
+        // // Don't allow passwords that might contain shell metacharacters
+        // // This is a secondary defense in addition to using execFile
+        // if (/[;&|`$<>]/.test(password)) {
+        //     throw new Error('Invalid password: Contains illegal characters.');
+        // }
 
         let tempDir = null;
         let inputPath = null;
@@ -61,8 +79,12 @@ class qpdfDecryption extends PDFDecryptionStrategy {
 
             fs.writeFileSync(inputPath, pdfBuffer);
 
-            const command = `qpdf --password=${password} --decrypt "${inputPath}" "${outputPath}"`;
-            await this.execCommand(command);
+            await this.execCommand('qpdf', [
+                `--password=${password}`,
+                '--decrypt',
+                inputPath,
+                outputPath
+            ]);            
 
             if (!fs.existsSync(outputPath)) {
                 throw new Error('Failed to decrypt PDF: Output file not created.');
