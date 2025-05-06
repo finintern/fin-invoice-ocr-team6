@@ -12,27 +12,37 @@ class qpdfDecryption extends PDFDecryptionStrategy {
         this.checkQpdfAvailability();
     }
 
-    checkQpdfAvailability() {
-        // Step 1: resolve full path to qpdf
-        exec('which qpdf', (whichErr, stdout) => {
-          if (whichErr || !stdout) {
-            this.isQpdfAvailable = false;
-            console.warn('QPDF not found in PATH. PDF decryption will not work until qpdf is installed.');
-            return;
-          }
-    
-          const qpdfPath = stdout.trim(); // e.g., '/usr/bin/qpdf'
-    
-          // Step 2: check version using resolved path
-          exec(`${qpdfPath} --version`, (versionErr) => {
-            this.isQpdfAvailable = !versionErr;
-    
-            if (!this.isQpdfAvailable) {
-              console.warn('QPDF is installed but may be broken. PDF decryption will not work.');
-            }
-          });
+    _checkQpdfInPath() {
+        return new Promise((resolve, reject) => {
+            exec('which qpdf', (error, stdout) => {
+                if (error || !stdout.trim()) {
+                    return reject(error || new Error('qpdf not found'));
+                }
+                resolve(stdout.trim());
+            });
         });
-      }
+    }
+
+    _checkQpdfVersion(qpdfPath) {
+        return new Promise((resolve, reject) => {
+            exec(`${qpdfPath} --version`, (error) => {
+                if (error) return reject(error);
+                resolve();
+            });
+        });
+    }
+
+    checkQpdfAvailability() {
+        this._checkQpdfInPath()
+            .then((qpdfPath) => this._checkQpdfVersion(qpdfPath))
+            .then(() => {
+            this.isQpdfAvailable = true;
+        })
+        .catch(() => {
+            this.isQpdfAvailable = false;
+            console.warn('QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.');
+        });
+    }
 
     async execCommand(command, args) {
         // Check if qpdf is available before executing the command

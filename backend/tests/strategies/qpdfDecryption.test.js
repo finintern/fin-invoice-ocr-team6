@@ -95,36 +95,13 @@ describe('QpdfDecryption', () => {
       setTimeout(() => {
         expect(instance.isQpdfAvailable).toBe(false);
         expect(warnSpy).toHaveBeenCalledWith(
-          'QPDF not found in PATH. PDF decryption will not work until qpdf is installed.'
+          'QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.'
         );
         warnSpy.mockRestore();
         resolve();
       }, 10);
     });
   });
-  
-  // test('initialization and availability detection', () => {
-  //   // Test initial state
-  //   exec.mockImplementation(() => ({ on: jest.fn() }));
-  //   const freshDecryption = new QpdfDecryption();
-  //   expect(freshDecryption.isQpdfAvailable).toBe(false);
-    
-  //   // Test availability detection - must create separate instances to test callbacks
-  //   const availableInstance = new QpdfDecryption();
-  //   const unavailableInstance = new QpdfDecryption();
-    
-  //   // Reset mock to properly capture callback functions
-  //   const availableCallback = exec.mock.calls[exec.mock.calls.length - 2][1];
-  //   const unavailableCallback = exec.mock.calls[exec.mock.calls.length - 1][1];
-    
-  //   // QPDF available
-  //   availableCallback(null, 'QPDF version 10.6.3', '');
-  //   expect(availableInstance.isQpdfAvailable).toBe(true);
-    
-  //   // QPDF not available
-  //   unavailableCallback(new Error('Command not found'), '', 'Command not found');
-  //   expect(unavailableInstance.isQpdfAvailable).toBe(false);
-  // });
   
   test('execCommand functionality', async () => {
     // Success case
