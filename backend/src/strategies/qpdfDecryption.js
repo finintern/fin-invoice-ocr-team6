@@ -13,13 +13,26 @@ class qpdfDecryption extends PDFDecryptionStrategy {
     }
 
     checkQpdfAvailability() {
-        exec('qpdf --version', (error) => {
-            this.isQpdfAvailable = !error;
+        // Step 1: resolve full path to qpdf
+        exec('which qpdf', (whichErr, stdout) => {
+          if (whichErr || !stdout) {
+            this.isQpdfAvailable = false;
+            console.warn('QPDF not found in PATH. PDF decryption will not work until qpdf is installed.');
+            return;
+          }
+    
+          const qpdfPath = stdout.trim(); // e.g., '/usr/bin/qpdf'
+    
+          // Step 2: check version using resolved path
+          exec(`${qpdfPath} --version`, (versionErr) => {
+            this.isQpdfAvailable = !versionErr;
+    
             if (!this.isQpdfAvailable) {
-                console.warn('QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.');
+              console.warn('QPDF is installed but may be broken. PDF decryption will not work.');
             }
+          });
         });
-    }
+      }
 
     async execCommand(command, args) {
         // Check if qpdf is available before executing the command
