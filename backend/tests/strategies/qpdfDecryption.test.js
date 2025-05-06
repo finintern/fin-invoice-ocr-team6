@@ -55,29 +55,76 @@ describe('QpdfDecryption', () => {
     qpdfDecryption = new QpdfDecryption();
     qpdfDecryption.isQpdfAvailable = true;
   });
+
+  test('should set isQpdfAvailable to true when qpdf is found and version works', () => {
+    // Mock sequential calls to exec
+    exec
+      .mockImplementationOnce((cmd, callback) => {
+        // This is for 'which qpdf'
+        expect(cmd).toBe('which qpdf');
+        callback(null, '/usr/bin/qpdf\n');
+      })
+      .mockImplementationOnce((cmd, callback) => {
+        // This is for '/usr/bin/qpdf --version'
+        expect(cmd).toBe('/usr/bin/qpdf --version');
+        callback(null, 'QPDF version 11.0.0');
+      });
   
-  test('initialization and availability detection', () => {
-    // Test initial state
-    exec.mockImplementation(() => ({ on: jest.fn() }));
-    const freshDecryption = new QpdfDecryption();
-    expect(freshDecryption.isQpdfAvailable).toBe(false);
-    
-    // Test availability detection - must create separate instances to test callbacks
-    const availableInstance = new QpdfDecryption();
-    const unavailableInstance = new QpdfDecryption();
-    
-    // Reset mock to properly capture callback functions
-    const availableCallback = exec.mock.calls[exec.mock.calls.length - 2][1];
-    const unavailableCallback = exec.mock.calls[exec.mock.calls.length - 1][1];
-    
-    // QPDF available
-    availableCallback(null, 'QPDF version 10.6.3', '');
-    expect(availableInstance.isQpdfAvailable).toBe(true);
-    
-    // QPDF not available
-    unavailableCallback(new Error('Command not found'), '', 'Command not found');
-    expect(unavailableInstance.isQpdfAvailable).toBe(false);
+    const instance = new QpdfDecryption();
+  
+    // We need to wait for asynchronous calls to resolve
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        expect(instance.isQpdfAvailable).toBe(true);
+        resolve();
+      }, 10);
+    });
   });
+
+  test('should set isQpdfAvailable to false when qpdf is not found', () => {
+    exec.mockImplementationOnce((cmd, callback) => {
+      expect(cmd).toBe('which qpdf');
+      callback(new Error('not found'), '', '');
+    });
+  
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+  
+    const instance = new QpdfDecryption();
+  
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        expect(instance.isQpdfAvailable).toBe(false);
+        expect(warnSpy).toHaveBeenCalledWith(
+          'QPDF not found in PATH. PDF decryption will not work until qpdf is installed.'
+        );
+        warnSpy.mockRestore();
+        resolve();
+      }, 10);
+    });
+  });
+  
+  // test('initialization and availability detection', () => {
+  //   // Test initial state
+  //   exec.mockImplementation(() => ({ on: jest.fn() }));
+  //   const freshDecryption = new QpdfDecryption();
+  //   expect(freshDecryption.isQpdfAvailable).toBe(false);
+    
+  //   // Test availability detection - must create separate instances to test callbacks
+  //   const availableInstance = new QpdfDecryption();
+  //   const unavailableInstance = new QpdfDecryption();
+    
+  //   // Reset mock to properly capture callback functions
+  //   const availableCallback = exec.mock.calls[exec.mock.calls.length - 2][1];
+  //   const unavailableCallback = exec.mock.calls[exec.mock.calls.length - 1][1];
+    
+  //   // QPDF available
+  //   availableCallback(null, 'QPDF version 10.6.3', '');
+  //   expect(availableInstance.isQpdfAvailable).toBe(true);
+    
+  //   // QPDF not available
+  //   unavailableCallback(new Error('Command not found'), '', 'Command not found');
+  //   expect(unavailableInstance.isQpdfAvailable).toBe(false);
+  // });
   
   test('execCommand functionality', async () => {
     // Success case
