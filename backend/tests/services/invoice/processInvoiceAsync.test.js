@@ -74,7 +74,7 @@ describe('InvoiceService.processInvoiceAsync direct implementation', () => {
 
     // Assert
     expect(Sentry.addBreadcrumb).toHaveBeenCalledWith({
-      category: "invoiceProcessing",
+      category: "service:invoice",
       message: `Starting async processing for invoice ${uuid}`,
       level: "info"
     });

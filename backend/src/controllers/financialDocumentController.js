@@ -3,6 +3,7 @@ const PdfDecryptionService = require('../services/pdfDecryptionService');
 const QpdfDecryption = require('../strategies/qpdfDecryption');
 const { safeResponse } = require('../utils/responseHelper');
 const { ValidationError, AuthError, ForbiddenError, PayloadTooLargeError, UnsupportedMediaTypeError, NotFoundError } = require('../utils/errors');
+const Sentry = require("../instrument");
 
 class FinancialDocumentController {
   constructor(service, documentType) {
@@ -33,53 +34,88 @@ class FinancialDocumentController {
   }
 
   async uploadFile(req, res) {
-    try {
-      await this.executeWithTimeout(async () => {
-        await this.validateUploadRequest(req);
-        
-        // Check if the file is encrypted
-        const validationResult = await this.validateUploadFile(req.file);
-        
-        // If file is encrypted
-        if (validationResult && validationResult.isEncrypted) {
-          // If password is provided in the request body, try to decrypt
-          if (req.body && req.body.password) {
-            try {
-              // Attempt to decrypt the PDF with the provided password
-              const decryptedBuffer = await this.pdfDecryptionService.decrypt(
-                validationResult.buffer, 
-                req.body.password
-              );
-              
-              // Replace the encrypted buffer with the decrypted one
-              req.file.buffer = decryptedBuffer;
-              
-              // Continue with normal processing using decrypted file
-              const result = await this.processUpload(req);
-              return safeResponse(res, 200, result);
-            } catch (error) {
-              // Handle decryption errors
-              if (error.message.includes("Incorrect password")) {
-                throw new ValidationError("Incorrect password for encrypted PDF");
-              }
-              throw new ValidationError(`Failed to decrypt PDF: ${error.message}`);
-            }
-          } else {
-            // No password provided, inform client that password is required
-            return safeResponse(res, 403, {
-              message: "PDF is encrypted and requires a password",
-              requiresPassword: true
-            });
-          }
+    return Sentry.startSpan(
+      {
+        name: `${this.documentType}Upload`,
+        op: "upload.document",
+        attributes: {
+          documentType: this.documentType,
+          fileName: req.file?.originalname,
+          fileSize: req.file?.size,
+          partnerId: req.user?.uuid
         }
-        
-        // Process non-encrypted file normally
-        const result = await this.processUpload(req);
-        return safeResponse(res, 200, result);
-      });
-    } catch (error) {
-      return this.handleError(res, error);
-    }
+      },
+      async (span) => {
+        try {
+          await this.executeWithTimeout(async () => {
+            await this.validateUploadRequest(req);
+            
+            Sentry.addBreadcrumb({
+              category: "controller:document",
+              message: `Validating ${this.documentType} file upload`,
+              level: "info"
+            });
+            
+            // Check if the file is encrypted
+            const validationResult = await this.validateUploadFile(req.file);
+            
+            // If file is encrypted
+            if (validationResult && validationResult.isEncrypted) {
+              // If password is provided in the request body, try to decrypt
+              if (req.body && req.body.password) {
+                try {
+                  Sentry.addBreadcrumb({
+                    category: "controller:document",
+                    message: `Decrypting encrypted ${this.documentType} file`,
+                    level: "info"
+                  });
+                  
+                  // Attempt to decrypt the PDF with the provided password
+                  const decryptedBuffer = await this.pdfDecryptionService.decrypt(
+                    validationResult.buffer, 
+                    req.body.password
+                  );
+                  
+                  // Replace the encrypted buffer with the decrypted one
+                  req.file.buffer = decryptedBuffer;
+                  
+                  // Continue with normal processing using decrypted file
+                  const result = await this.processUpload(req);
+                  return safeResponse(res, 200, result);
+                } catch (error) {
+                  // Handle decryption errors
+                  if (error.message.includes("Incorrect password")) {
+                    throw new ValidationError("Incorrect password for encrypted PDF");
+                  }
+                  throw new ValidationError(`Failed to decrypt PDF: ${error.message}`);
+                }
+              } else {
+                // No password provided, inform client that password is required
+                return safeResponse(res, 403, {
+                  message: "PDF is encrypted and requires a password",
+                  requiresPassword: true
+                });
+              }
+            }
+            
+            Sentry.addBreadcrumb({
+              category: "controller:document",
+              message: `Processing ${this.documentType} file upload`,
+              level: "info"
+            });
+            
+            // Process non-encrypted file normally
+            const result = await this.processUpload(req);
+            return safeResponse(res, 200, result);
+          });
+        } catch (error) {
+          Sentry.captureException(error);
+          return this.handleError(res, error);
+        } finally {
+          span.end();
+        }
+      }
+    );
   }
 
   async validateUploadRequest(req) {

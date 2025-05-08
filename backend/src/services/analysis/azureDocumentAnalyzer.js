@@ -28,7 +28,7 @@ class AzureDocumentAnalyzer {
           Sentry.captureMessage(`analyzeDocument() called with documentSource: ${typeof documentSource === 'string' ? documentSource : 'Buffer data'}`);
 
           Sentry.addBreadcrumb({
-            category: "documentAnalysis",
+            category: "service:azure",
             message: `Starting document analysis for: ${typeof documentSource === "string" ? documentSource : "Binary Buffer"}`,
             level: "info",
           });
@@ -49,7 +49,7 @@ class AzureDocumentAnalyzer {
           }
 
           Sentry.addBreadcrumb({
-            category: "documentAnalysis",
+            category: "service:azure",
             message: "Azure analysis started...",
             level: "info",
           });
@@ -58,7 +58,7 @@ class AzureDocumentAnalyzer {
           console.log("Analysis completed");
 
           Sentry.addBreadcrumb({
-            category: "documentAnalysis",
+            category: "service:azure",
             message: "Azure analysis completed successfully",
             level: "info",
           });
@@ -71,7 +71,7 @@ class AzureDocumentAnalyzer {
           };
         } catch (error) {
           Sentry.addBreadcrumb({
-            category: "documentAnalysis",
+            category: "service:azure",
             message: `Error encountered: ${error.message}`,
             level: "error",
           });

@@ -59,8 +59,8 @@ describe('PurchaseOrderService.processPurchaseOrderAsync direct implementation',
 
     // Assert
     expect(Sentry.addBreadcrumb).toHaveBeenCalledWith({
-      category: "purchaseOrderProcessing",
-      message: `Starting async processing for purchase order ${uuid}`,
+      category: "service:purchaseOrder",
+      message: `Analysis results uploaded to S3 for purchase order ${uuid}`,
       level: "info"
     });
     

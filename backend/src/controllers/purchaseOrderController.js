@@ -251,7 +251,7 @@ class PurchaseOrderController extends FinancialDocumentController {
     const partnerId = req.user.uuid;
 
     Sentry.addBreadcrumb({
-      category: 'upload',
+      category: 'controller:purchaseOrder',
       message: 'Starting purchase order upload process',
       data: {
         filename: originalname,

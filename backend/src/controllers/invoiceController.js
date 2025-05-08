@@ -54,7 +54,7 @@ class InvoiceController extends FinancialDocumentController {
     console.log("Skip analysis parameter detected:", skipAnalysis);
 
     Sentry.addBreadcrumb({
-      category: 'upload',
+      category: 'controller:invoice',
       message: 'Starting invoice upload process',
       data: {
         filename: originalname,

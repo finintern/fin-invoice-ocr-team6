@@ -84,7 +84,7 @@ class InvoiceService extends FinancialDocumentService {
     try {
       this.logger.logProcessingStart(invoiceId);
       Sentry.addBreadcrumb({
-        category: "invoiceProcessing",
+        category: "service:invoice",
         message: `Starting async processing for invoice ${uuid}`,
         level: "info"
       });
@@ -104,6 +104,12 @@ class InvoiceService extends FinancialDocumentService {
       const jsonUrl = await this.uploadAnalysisResults(analysisResult, invoiceId);
       if (!skipAnalysis) {
         this.logger.logAnalysisComplete(invoiceId, jsonUrl);
+      
+      Sentry.addBreadcrumb({
+        category: "service:invoice",
+        message: `Analysis results uploaded to S3 for invoice ${uuid}`,
+        level: "info"
+      });
       }
 
       // 3. Map hasil analisis ke model data
@@ -114,6 +120,12 @@ class InvoiceService extends FinancialDocumentService {
         hasCustomerData: !!customerData,
         hasVendorData: !!vendorData,
         itemsCount: itemsData?.length
+      });
+      
+      Sentry.addBreadcrumb({
+        category: "service:invoice",
+        message: `Data mapping completed for invoice ${uuid}`,
+        level: "info"
       });
 
       // 4. Update record invoice dengan data hasil analisis dan URL JSON
@@ -132,9 +144,23 @@ class InvoiceService extends FinancialDocumentService {
       await this.invoiceRepository.update(invoiceId, { status: DocumentStatus.ANALYZED });
 
       this.logger.logProcessingComplete(invoiceId);
+      
+      Sentry.addBreadcrumb({
+        category: "service:invoice",
+        message: `Processing completed for invoice ${uuid}`,
+        level: "info"
+      });
+      
       Sentry.captureMessage(`Successfully completed processing invoice ${uuid}`);
     } catch (error) {
       this.logger.logError(invoiceId, error, 'PROCESSING');
+      
+      Sentry.addBreadcrumb({
+        category: "service:invoice",
+        message: `Error processing invoice ${uuid}: ${error.message}`,
+        level: "error"
+      });
+      
       Sentry.captureException(error);
 
       // Update status menjadi "Failed" jika processing gagal

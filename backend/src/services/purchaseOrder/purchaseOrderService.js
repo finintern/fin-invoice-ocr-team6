@@ -75,7 +75,7 @@ class PurchaseOrderService extends FinancialDocumentService {
     try {
       // Logger
       Sentry.addBreadcrumb({
-        category: "purchaseOrderProcessing",
+        category: "service:purchaseOrder",
         message: `Starting async processing for purchase order ${uuid}`,
         level: "info"
       });
@@ -85,13 +85,22 @@ class PurchaseOrderService extends FinancialDocumentService {
 
       // 2. Upload OCR results to S3 as JSON and get the URL
       const jsonUrl = await this.uploadAnalysisResults(analysisResult, purchaseOrderId);
-      // We'll add logger here later
+      
+      Sentry.addBreadcrumb({
+        category: "service:purchaseOrder",
+        message: `Analysis results uploaded to S3 for purchase order ${uuid}`,
+        level: "info"
+      });
 
       // 3. Map analysis results to data model
       const { purchaseOrderData, customerData, vendorData, itemsData } =
         this.mapAnalysisResult(analysisResult, partnerId, originalname, buffer.length);
 
-      // We'll add logger here later
+      Sentry.addBreadcrumb({
+        category: "service:purchaseOrder",
+        message: `Data mapping completed for purchase order ${uuid}`,
+        level: "info"
+      });
 
       // 4. Update purchase order record with analysis data and JSON URL
       await this.updatePurchaseOrderRecord(purchaseOrderId, {
@@ -108,10 +117,20 @@ class PurchaseOrderService extends FinancialDocumentService {
       // 7. Update status to "Analyzed"
       await this.purchaseOrderRepository.update(purchaseOrderId, { status: DocumentStatus.ANALYZED });
 
-      // We'll add logger here later
+      Sentry.addBreadcrumb({
+        category: "service:purchaseOrder",
+        message: `Processing completed for purchase order ${uuid}`,
+        level: "info"
+      });
+      
       Sentry.captureMessage(`Successfully completed processing purchase order ${uuid}`);
     } catch (error) {
-      // We'll add logger here later
+      Sentry.addBreadcrumb({
+        category: "service:purchaseOrder",
+        message: `Error processing purchase order ${uuid}: ${error.message}`,
+        level: "error"
+      });
+      
       Sentry.captureException(error);
 
       // Update status to "Failed" if processing fails
