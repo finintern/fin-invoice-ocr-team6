@@ -3,20 +3,40 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const { exec, spawn } = require('child_process');
+const { spawn } = require('child_process');
 
 class qpdfDecryption extends PDFDecryptionStrategy {
     constructor() {
         super();
-        this.isQpdfAvailable = false;
-        this.checkQpdfAvailability();
+        this._qpdfAvailabilityPromise = null;
+        this.initialize(); 
+    }
+
+    async initialize() {
+        try {
+            await this.checkQpdfAvailability();
+        } catch (err) {
+            console.error(err);
+        }
     }
 
     _checkQpdfInPath() {
-        return new Promise((resolve, reject) => {
-            exec('which qpdf', (error, stdout) => {
-                if (error || !stdout.trim()) {
-                    return reject(error || new Error('qpdf not found'));
+        return new Promise((resolve, reject) => {           
+            const process = spawn('which', ['qpdf']);
+            let stdout = '';
+            let stderr = '';
+            
+            process.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+            
+            process.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+            
+            process.on('close', (code) => {
+                if (code !== 0 || !stdout.trim()) {
+                    return reject(new Error(stderr.trim() || 'QPDF not found in PATH'));
                 }
                 resolve(stdout.trim());
             });
@@ -25,28 +45,44 @@ class qpdfDecryption extends PDFDecryptionStrategy {
 
     _checkQpdfVersion(qpdfPath) {
         return new Promise((resolve, reject) => {
-            exec(`${qpdfPath} --version`, (error) => {
-                if (error) return reject(error);
+            const process = spawn(qpdfPath, ['--version']);
+            
+            process.on('error', (error) => {
+                reject(error);
+            });
+            
+            process.on('close', (code) => {
+                if (code !== 0) {
+                    return reject(new Error('Failed to verify qpdf version'));
+                }
                 resolve();
             });
         });
     }
 
-    checkQpdfAvailability() {
-        this._checkQpdfInPath()
-            .then((qpdfPath) => this._checkQpdfVersion(qpdfPath))
-            .then(() => {
-            this.isQpdfAvailable = true;
-        })
-        .catch(() => {
-            this.isQpdfAvailable = false;
-            console.warn('QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.');
+    async checkQpdfAvailability() {
+        if (this._qpdfAvailabilityPromise) {
+            return this._qpdfAvailabilityPromise;
+        }
+        
+        this._qpdfAvailabilityPromise = new Promise((resolve) => {
+            this._checkQpdfInPath()
+                .then(qpdfPath => this._checkQpdfVersion(qpdfPath))
+                .then(() => resolve(true))
+                // eslint-disable-next-line no-unused-vars
+                .catch(_error => {                    
+                    console.warn('QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.');
+                    resolve(false);
+                });
         });
+        
+        return this._qpdfAvailabilityPromise;
     }
 
     async execCommand(command, args) {
-        // Check if qpdf is available before executing the command
-        if (!this.isQpdfAvailable) {
+        const isAvailable = await this.checkQpdfAvailability();
+        
+        if (!isAvailable) {
             throw new Error(
                 'QPDF is not installed. Please install QPDF to decrypt PDF files.\n' +
                 'Windows: Install from https://qpdf.sourceforge.io/ or using Chocolatey: choco install qpdf\n' +
