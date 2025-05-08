@@ -85,25 +85,144 @@ describe('QpdfDecryption', () => {
     }); 
   }); 
 
-  test('_checkQpdfInPath should find qpdf executable', async () => {
-    // Setup the mock
-    const mockProcess = createMockProcess({ stdoutData: '/usr/bin/qpdf\n' });
-    spawn.mockImplementation(() => mockProcess);
-    
-    const qpdfPath = await qpdfDecryption._checkQpdfInPath();
-    
-    expect(spawn).toHaveBeenCalledWith('which', ['qpdf']);
-    expect(qpdfPath).toBe('/usr/bin/qpdf');
-  });
+  describe('_checkQpdfInPath', () => {
+    test('_checkQpdfInPath should find qpdf executable', async () => {
+      // Setup the mock
+      const mockProcess = createMockProcess({ stdoutData: '/usr/bin/qpdf\n' });
+      spawn.mockImplementation(() => mockProcess);
+      
+      const qpdfPath = await qpdfDecryption._checkQpdfInPath();
+      
+      expect(spawn).toHaveBeenCalledWith('which', ['qpdf']);
+      expect(qpdfPath).toBe('/usr/bin/qpdf');
+    });
+
+    test('_checkQpdfInPath should throw an error if qpdf is not found', async () => {
+      const mockProcess = createMockProcess({ exitCode: 1, stderrData: 'QPDF not found in PATH' });
+      spawn.mockImplementation(() => mockProcess);
+      
+      await expect(qpdfDecryption._checkQpdfInPath()).rejects.toThrow('QPDF not found in PATH');
+      expect(spawn).toHaveBeenCalledWith('which', ['qpdf']);
+    }); 
+  }); 
+
+  describe('_checkQpdfVersion', () => {
+    test('_checkQpdfVersion should verify qpdf version', async () => {
+      const mockProcess = createMockProcess();
+      spawn.mockImplementation(() => mockProcess);
+      
+      await qpdfDecryption._checkQpdfVersion('/usr/bin/qpdf');
+      
+      expect(spawn).toHaveBeenCalledWith('/usr/bin/qpdf', ['--version']);
+    });
+
+    test('_checkQpdfVersion should reject when process emits an error', async () => {
+      // Create a mock process that emits an error event
+      const expectedError = new Error('Process execution failed');
+      const mockProcess = {
+        on: jest.fn((event, callback) => {
+          if (event === 'error') {
+            callback(expectedError);
+          }
+        })
+      };
+      
+      spawn.mockImplementation(() => mockProcess);
+      
+      // Call the method and verify it rejects with the emitted error
+      await expect(qpdfDecryption._checkQpdfVersion('/usr/bin/qpdf'))
+        .rejects.toEqual(expectedError);
+        
+      // Verify spawn was called with correct arguments
+      expect(spawn).toHaveBeenCalledWith('/usr/bin/qpdf', ['--version']);
+    });
   
-  test('_checkQpdfVersion should verify qpdf version', async () => {
-    const mockProcess = createMockProcess();
-    spawn.mockImplementation(() => mockProcess);
-    
-    await qpdfDecryption._checkQpdfVersion('/usr/bin/qpdf');
-    
-    expect(spawn).toHaveBeenCalledWith('/usr/bin/qpdf', ['--version']);
-  });
+    test('_checkQpdfVersion should reject when process exits with non-zero code', async () => {
+      // Create a mock process that returns a non-zero exit code
+      const mockProcess = {
+        on: jest.fn((event, callback) => {
+          if (event === 'close') {
+            callback(1); // Exit code 1 (error)
+          }
+        })
+      };
+      
+      spawn.mockImplementation(() => mockProcess);
+      
+      // Call the method and verify it rejects with expected error message
+      await expect(qpdfDecryption._checkQpdfVersion('/usr/bin/qpdf'))
+        .rejects.toThrow('Failed to verify qpdf version');
+        
+      // Verify spawn was called with correct arguments
+      expect(spawn).toHaveBeenCalledWith('/usr/bin/qpdf', ['--version']);
+    });
+  
+    test('_checkQpdfVersion should reject when qpdf path is invalid', async () => {
+      // Create a mock process that emits an error for invalid path
+      const expectedError = new Error('ENOENT: no such file or directory');
+      const mockProcess = {
+        on: jest.fn((event, callback) => {
+          if (event === 'error') {
+            callback(expectedError);
+          }
+        })
+      };
+      
+      spawn.mockImplementation(() => mockProcess);
+      
+      await expect(qpdfDecryption._checkQpdfVersion('/invalid/path/to/qpdf'))
+        .rejects.toEqual(expectedError);
+        
+      expect(spawn).toHaveBeenCalledWith('/invalid/path/to/qpdf', ['--version']);
+    });
+  
+    test('_checkQpdfVersion should reject when process is terminated with signal', async () => {
+      // Create a mock process that gets terminated with a signal
+      const mockProcess = {
+        on: jest.fn((event, callback) => {
+          if (event === 'close') {
+            // Pass code=null and signal='SIGTERM' to simulate termination
+            callback(null, 'SIGTERM');
+          }
+        })
+      };
+      
+      spawn.mockImplementation(() => mockProcess);
+      
+      await expect(qpdfDecryption._checkQpdfVersion('/usr/bin/qpdf'))
+        .rejects.toThrow('Failed to verify qpdf version');
+    });
+
+    test('should use default message when stderr is empty', async () => {
+      const mockProcess = {
+        stdout: {
+          on: jest.fn((event) => {
+            if (event === 'data') {
+              // Don't provide any stdout data
+            }
+          })
+        },
+        stderr: {
+          on: jest.fn((event) => {
+            if (event === 'data') {
+              // Empty stderr
+            }
+          })
+        },
+        on: jest.fn((event, callback) => {
+          if (event === 'close') {
+            // Call the close handler with non-zero exit code
+            callback(1);
+          }
+        })
+      };
+      
+      spawn.mockImplementation(() => mockProcess);
+      
+      // The original implementation should now reject with the default message
+      await expect(qpdfDecryption._checkQpdfInPath()).rejects.toThrow('QPDF not found in PATH');
+    });
+  }); 
 
   describe('checkQpdfAvailability', () => {
     test('should set isQpdfAvailable to true when qpdf is found', async () => {
@@ -149,6 +268,24 @@ describe('QpdfDecryption', () => {
   
       const result = await qpdfDecryption.checkQpdfAvailability();
       expect(result).toBe(false);
+    });
+
+    test('should cache the result of checkQpdfAvailability', async () => {
+      // Restore original implementation for this test only
+      QpdfDecryption.prototype.checkQpdfAvailability.mockRestore();
+  
+      // Mock both required methods
+      jest.spyOn(qpdfDecryption, '_checkQpdfInPath').mockResolvedValue('/usr/bin/qpdf');
+      jest.spyOn(qpdfDecryption, '_checkQpdfVersion').mockResolvedValue();
+      
+      // Reset the value to ensure the test is valid
+      qpdfDecryption.isQpdfAvailable = false;
+  
+      const result1 = await qpdfDecryption.checkQpdfAvailability();
+      const result2 = await qpdfDecryption.checkQpdfAvailability();
+  
+      expect(result1).toBe(true);
+      expect(result2).toBe(true);
     });
   }); 
   
