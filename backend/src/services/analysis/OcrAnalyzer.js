@@ -9,7 +9,7 @@ class OcrAnalyzer {
    * @returns {Promise<Object>} - Structured data extracted from the document
    * @throws {Error} - If analysis fails
    */
-  async analyzeDocument(documentSource) {
+  async analyzeDocument(_documentSource) {
     throw new Error('analyzeDocument method must be implemented by subclass');
   }
 
