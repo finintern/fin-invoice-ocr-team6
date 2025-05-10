@@ -1,11 +1,11 @@
-const PDFDecryptionStrategy = require('./pdfDecryptionStrategy');
+const PdfDecryptionStrategy = require('./pdfDecryptionStrategy');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const { spawn } = require('child_process');
 
-class qpdfDecryption extends PDFDecryptionStrategy {
+class QpdfDecryption extends PdfDecryptionStrategy {
     constructor() {
         super();
         this._qpdfAvailabilityPromise = null;
@@ -148,4 +148,4 @@ class qpdfDecryption extends PDFDecryptionStrategy {
     }
 }
 
-module.exports = qpdfDecryption;
+module.exports = QpdfDecryption;

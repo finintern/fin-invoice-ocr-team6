@@ -1,7 +1,7 @@
 const PdfDecryptionService = require('../../src/services/pdfDecryptionService');
-const PDFDecryptionStrategy = require('../../src/strategies/pdfDecryptionStrategy');
+const PdfDecryptionStrategy = require('../../src/strategies/pdfDecryptionStrategy');
 
-class MockDecryptionStrategy extends PDFDecryptionStrategy {
+class MockDecryptionStrategy extends PdfDecryptionStrategy {
   decrypt = jest.fn();
 }
 

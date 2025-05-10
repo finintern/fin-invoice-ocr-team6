@@ -1,5 +1,5 @@
 const QpdfDecryption = require('../../src/strategies/qpdfDecryption');
-const PDFDecryptionStrategy = require('../../src/strategies/pdfDecryptionStrategy');
+const PdfDecryptionStrategy = require('../../src/strategies/pdfDecryptionStrategy');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
@@ -397,7 +397,7 @@ describe('QpdfDecryption', () => {
   });
   
   test('class inheritance', () => {
-    expect(qpdfDecryption).toBeInstanceOf(PDFDecryptionStrategy);
+    expect(qpdfDecryption).toBeInstanceOf(PdfDecryptionStrategy);
   });
 
 
