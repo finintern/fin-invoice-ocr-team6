@@ -21,25 +21,12 @@ class qpdfDecryption extends PDFDecryptionStrategy {
     }
 
     _checkQpdfInPath() {
-        return new Promise((resolve, reject) => {           
-            const process = spawn('which', ['qpdf']);
-            let stdout = '';
-            let stderr = '';
-            
-            process.stdout.on('data', (data) => {
-                stdout += data.toString();
-            });
-            
-            process.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
-            
-            process.on('close', (code) => {
-                if (code !== 0 || !stdout.trim()) {
-                    return reject(new Error(stderr.trim() || 'QPDF not found in PATH'));
-                }
-                resolve(stdout.trim());
-            });
+        return new Promise((resolve, reject) => {                     
+            const envPath = process.env.QPDF_PATH;
+            if (envPath && fs.existsSync(envPath)) {
+                return resolve(envPath);
+            }  
+            reject(new Error('QPDF not found in PATH.'));
         });
     }
 
@@ -113,18 +100,7 @@ class qpdfDecryption extends PDFDecryptionStrategy {
         if (!Buffer.isBuffer(pdfBuffer)) {
             throw new Error('Invalid input: Expected a Buffer.');
         }
-
-        // // Validate password - reject potentially dangerous inputs
-        // if (typeof password !== 'string') {
-        //     throw new Error('Invalid password: Expected a string.');
-        // }
         
-        // // Don't allow passwords that might contain shell metacharacters
-        // // This is a secondary defense in addition to using execFile
-        // if (/[;&|`$<>]/.test(password)) {
-        //     throw new Error('Invalid password: Contains illegal characters.');
-        // }
-
         let tempDir = null;
         let inputPath = null;
         let outputPath = null;
