@@ -39,7 +39,7 @@ class qpdfDecryption extends PDFDecryptionStrategy {
     }
 
     async checkQpdfAvailability() {
-        if (this._qpdfAvailabilityPromise) {
+        if (await this._qpdfAvailabilityPromise) {
             return this._qpdfAvailabilityPromise;
         }
         
