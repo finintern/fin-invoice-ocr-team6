@@ -62,7 +62,7 @@ describe('QpdfDecryption', () => {
     // Prevent checkQpdfAvailability from running
     jest.spyOn(QpdfDecryption.prototype, 'checkQpdfAvailability').mockResolvedValue(true);
     qpdfDecryption = new QpdfDecryption();
-
+    fs.existsSync.mockReturnValue(true);
   });
 
   describe('initialize', () => {
@@ -86,28 +86,30 @@ describe('QpdfDecryption', () => {
   }); 
 
   describe('_checkQpdfInPath', () => {
-    test('_checkQpdfInPath should find qpdf executable', async () => {
-      // Setup the mock
-      const mockProcess = createMockProcess({ stdoutData: '/usr/bin/qpdf\n' });
-      spawn.mockImplementation(() => mockProcess);
+    test('should return qpdf path if found', async () => {
+      const envPath = '/opt/homebrew/bin/qpdf';
+      process.env.QPDF_PATH = envPath;
+      fs.existsSync.mockReturnValue(true);
       
       const qpdfPath = await qpdfDecryption._checkQpdfInPath();
-      
-      expect(spawn).toHaveBeenCalledWith('which', ['qpdf']);
-      expect(qpdfPath).toBe('/usr/bin/qpdf');
+      expect(qpdfPath).toBe(envPath);
     });
 
-    test('_checkQpdfInPath should throw an error if qpdf is not found', async () => {
-      const mockProcess = createMockProcess({ exitCode: 1, stderrData: 'QPDF not found in PATH' });
+    test('should throw an error if qpdf is not found', async () => {
+      fs.existsSync.mockReturnValue(false);
+      
+      const mockProcess = createMockProcess({ 
+        exitCode: 1, 
+        stderrData: 'QPDF not found in PATH' 
+      });
       spawn.mockImplementation(() => mockProcess);
       
       await expect(qpdfDecryption._checkQpdfInPath()).rejects.toThrow('QPDF not found in PATH');
-      expect(spawn).toHaveBeenCalledWith('which', ['qpdf']);
     }); 
   }); 
 
   describe('_checkQpdfVersion', () => {
-    test('_checkQpdfVersion should verify qpdf version', async () => {
+    test('should verify qpdf version', async () => {
       const mockProcess = createMockProcess();
       spawn.mockImplementation(() => mockProcess);
       
@@ -116,7 +118,7 @@ describe('QpdfDecryption', () => {
       expect(spawn).toHaveBeenCalledWith('/usr/bin/qpdf', ['--version']);
     });
 
-    test('_checkQpdfVersion should reject when process emits an error', async () => {
+    test('should reject when process emits an error', async () => {
       // Create a mock process that emits an error event
       const expectedError = new Error('Process execution failed');
       const mockProcess = {
@@ -137,7 +139,7 @@ describe('QpdfDecryption', () => {
       expect(spawn).toHaveBeenCalledWith('/usr/bin/qpdf', ['--version']);
     });
   
-    test('_checkQpdfVersion should reject when process exits with non-zero code', async () => {
+    test('should reject when process exits with non-zero code', async () => {
       // Create a mock process that returns a non-zero exit code
       const mockProcess = {
         on: jest.fn((event, callback) => {
@@ -157,7 +159,7 @@ describe('QpdfDecryption', () => {
       expect(spawn).toHaveBeenCalledWith('/usr/bin/qpdf', ['--version']);
     });
   
-    test('_checkQpdfVersion should reject when qpdf path is invalid', async () => {
+    test('should reject when qpdf path is invalid', async () => {
       // Create a mock process that emits an error for invalid path
       const expectedError = new Error('ENOENT: no such file or directory');
       const mockProcess = {
@@ -176,7 +178,7 @@ describe('QpdfDecryption', () => {
       expect(spawn).toHaveBeenCalledWith('/invalid/path/to/qpdf', ['--version']);
     });
   
-    test('_checkQpdfVersion should reject when process is terminated with signal', async () => {
+    test('should reject when process is terminated with signal', async () => {
       // Create a mock process that gets terminated with a signal
       const mockProcess = {
         on: jest.fn((event, callback) => {
@@ -220,7 +222,10 @@ describe('QpdfDecryption', () => {
       spawn.mockImplementation(() => mockProcess);
       
       // The original implementation should now reject with the default message
-      await expect(qpdfDecryption._checkQpdfInPath()).rejects.toThrow('QPDF not found in PATH');
+      // This test checks that if qpdf returns a non-zero exit code but doesn't 
+      // provide any error message in stderr, we still get the default error message.
+      // This ensures that the error handling is robust even when error details are missing.
+      await expect(qpdfDecryption._checkQpdfVersion('/usr/bin/qpdf')).rejects.toThrow('Failed to verify qpdf version');
     });
   }); 
 
@@ -307,45 +312,77 @@ describe('QpdfDecryption', () => {
     await expect(qpdfDecryption.execCommand('qpdf', ['--decrypt'])).rejects.toThrow('Failed to decrypt PDF: Error output');
   });
   
-  test('decrypt method scenarios', async () => {
+  describe('decrypt method', () => {
     const pdfBuffer = Buffer.from('encrypted pdf content');
     const password = 'password123';
     
-    // Mock execCommand to isolate tests
-    qpdfDecryption.execCommand = jest.fn().mockResolvedValue(undefined);
+    beforeEach(() => {
+      // Mock execCommand to isolate tests
+      qpdfDecryption.execCommand = jest.fn().mockResolvedValue(undefined);
+      fs.existsSync.mockRestore(); 
+    });
+
+    test('should reject when input is not a buffer', async () => {
+      await expect(qpdfDecryption.decrypt('not a buffer', password))
+        .rejects.toThrow('Invalid input: Expected a Buffer.');
+    });
     
-    // Input validation
-    await expect(qpdfDecryption.decrypt('not a buffer', password)).rejects.toThrow('Invalid input: Expected a Buffer.');
+    test('should successfully decrypt PDF with valid password', async () => {
+      fs.existsSync.mockReturnValue(true); // Simulate that the output file does not exist
+      const result = await qpdfDecryption.decrypt(pdfBuffer, password);
+      expect(fs.mkdirSync).toHaveBeenCalled();
+      expect(fs.writeFileSync).toHaveBeenCalled();
+      expect(qpdfDecryption.execCommand).toHaveBeenCalledWith(
+        'qpdf', 
+        expect.arrayContaining([`--password=${password}`, '--decrypt'])
+      );
+      expect(result).toEqual(Buffer.from('decrypted pdf content'));
+    });
     
-    // Successful decryption
-    const result = await qpdfDecryption.decrypt(pdfBuffer, password);
-    expect(fs.mkdirSync).toHaveBeenCalled();
-    expect(fs.writeFileSync).toHaveBeenCalled();
-    expect(qpdfDecryption.execCommand).toHaveBeenCalledWith('qpdf', expect.arrayContaining([`--password=${password}`, '--decrypt']));
-    expect(result).toEqual(Buffer.from('decrypted pdf content'));
+    test('should throw when output file is not created', async () => {
+      const originalExistsSync = fs.existsSync;
+      
+      try {
+        await expect(qpdfDecryption.decrypt(pdfBuffer, password))
+          .rejects.toThrow('Failed to decrypt PDF: Output file not created.');
+      } finally {
+        fs.existsSync = originalExistsSync;
+      }
+    });
     
-    // Output file missing
-    fs.existsSync.mockImplementation(path => !path.includes('decrypted.pdf'));
-    await expect(qpdfDecryption.decrypt(pdfBuffer, password)).rejects.toThrow('Output file not created');
+    test('should throw with specific message for incorrect password', async () => {
+      qpdfDecryption.execCommand = jest.fn().mockRejectedValue(new Error('Invalid password'));
+      await expect(qpdfDecryption.decrypt(pdfBuffer, password))
+        .rejects.toThrow('Incorrect password');
+    });
     
-    // Error handling
-    const errorCases = [
-      { error: 'Invalid password', expectedMessage: 'Incorrect password' },
-      { error: 'PDF header not found', expectedMessage: 'Corrupted file' },
-      { error: 'not a PDF file', expectedMessage: 'Corrupted file' },
-      { error: 'Unknown error', expectedMessage: 'Unknown error' }
-    ];
+    test('should throw with specific message for corrupted file (header not found)', async () => {
+      qpdfDecryption.execCommand = jest.fn().mockRejectedValue(new Error('PDF header not found'));
+      await expect(qpdfDecryption.decrypt(pdfBuffer, password))
+        .rejects.toThrow('Corrupted file');
+    });
     
-    for (const { error, expectedMessage } of errorCases) {
-      qpdfDecryption.execCommand = jest.fn().mockRejectedValue(new Error(error));
-      await expect(qpdfDecryption.decrypt(pdfBuffer, password)).rejects.toThrow(expectedMessage);
-    }
+    test('should throw with specific message for corrupted file (not a PDF)', async () => {
+      qpdfDecryption.execCommand = jest.fn().mockRejectedValue(new Error('not a PDF file'));
+      await expect(qpdfDecryption.decrypt(pdfBuffer, password))
+        .rejects.toThrow('Corrupted file');
+    });
     
-    // Cleanup is called even on error
-    const cleanupSpy = jest.spyOn(qpdfDecryption, 'cleanupFiles');
-    qpdfDecryption.execCommand = jest.fn().mockRejectedValue(new Error('Decryption failed'));
-    try { await qpdfDecryption.decrypt(pdfBuffer, password); } catch (e) { /* ignore */ }
-    expect(cleanupSpy).toHaveBeenCalled();
+    test('should throw original message for unknown errors', async () => {
+      qpdfDecryption.execCommand = jest.fn().mockRejectedValue(new Error('Unknown error'));
+      await expect(qpdfDecryption.decrypt(pdfBuffer, password))
+        .rejects.toThrow('Unknown error');
+    });
+    
+    test('should call cleanup even when decryption fails', async () => {
+      const cleanupSpy = jest.spyOn(qpdfDecryption, 'cleanupFiles');
+      qpdfDecryption.execCommand = jest.fn().mockRejectedValue(new Error('Decryption failed'));
+      
+      await expect(qpdfDecryption.decrypt(pdfBuffer, password))
+      .rejects.toThrow('Decryption failed');
+  
+      expect(cleanupSpy).toHaveBeenCalled();
+    });
   });
   
   test('cleanupFiles functionality', () => {
