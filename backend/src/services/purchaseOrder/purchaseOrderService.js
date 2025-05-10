@@ -304,20 +304,37 @@ class PurchaseOrderService extends FinancialDocumentService {
    * @returns {Observable} Observable with success message or error
    */
   deletePurchaseOrderById(id) {
+    // Log deletion initiated
+    PurchaseOrderLogger.logDeletionInitiated(id);
+
     return from(Promise.resolve())
       .pipe(
         switchMap(() => from(this.purchaseOrderRepository.delete(id))),
         map(result => {
           if (result === 0) {
             const err = new Error(`Failed to delete purchase order with ID: ${id}`);
+            // Hanya log jika error belum dilog sebelumnya
+            if (!err.logged) {
+              PurchaseOrderLogger.logDeletionError(id, err);
+              // Tandai error sudah dilog
+              err.logged = true;
+            }
             Sentry.captureException(err);
             throw err;
           }
+          // Log successful deletion
+          PurchaseOrderLogger.logDeletionSuccess(id);
           return { message: "Purchase order successfully deleted" };
         }),
         catchError(error => {
+          // Hanya log jika error belum dilog sebelumnya
+          if (!error.logged) {
+            PurchaseOrderLogger.logDeletionError(id, error);
+            // Tandai error sudah dilog
+            error.logged = true;
+          }
           Sentry.captureException(error);
-          throw new Error(error.message);
+          throw error;
         })
       );
   }
