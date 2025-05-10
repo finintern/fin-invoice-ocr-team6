@@ -9,15 +9,6 @@ class qpdfDecryption extends PDFDecryptionStrategy {
     constructor() {
         super();
         this._qpdfAvailabilityPromise = null;
-        this.initialize(); 
-    }
-
-    async initialize() {
-        try {
-            await this.checkQpdfAvailability();
-        } catch (err) {
-            console.error(err);
-        }
     }
 
     _checkQpdfInPath() {

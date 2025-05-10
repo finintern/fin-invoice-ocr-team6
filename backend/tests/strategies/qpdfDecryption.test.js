@@ -65,26 +65,6 @@ describe('QpdfDecryption', () => {
     fs.existsSync.mockReturnValue(true);
   });
 
-  describe('initialize', () => {
-    test('initialize should call checkQpdfAvailability', async () => {
-      const checkQpdfAvailabilitySpy = jest.spyOn(qpdfDecryption, 'checkQpdfAvailability');
-      await qpdfDecryption.initialize();
-      expect(checkQpdfAvailabilitySpy).toHaveBeenCalled();
-    });
-  
-    test('initialize should handle errors', async () => {
-      const checkQpdfAvailabilitySpy = jest.spyOn(qpdfDecryption, 'checkQpdfAvailability').mockRejectedValue(new Error('Test error'));
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-      
-      await qpdfDecryption.initialize();
-      
-      expect(checkQpdfAvailabilitySpy).toHaveBeenCalled();
-      expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Test error'));
-      
-      consoleErrorSpy.mockRestore();
-    }); 
-  }); 
-
   describe('_checkQpdfInPath', () => {
     test('should return qpdf path if found', async () => {
       const envPath = '/opt/homebrew/bin/qpdf';
@@ -251,7 +231,6 @@ describe('QpdfDecryption', () => {
   
       // Mock both required methods
       jest.spyOn(qpdfDecryption, '_checkQpdfInPath').mockRejectedValue(new Error('qpdf not found'));
-      // jest.spyOn(qpdfDecryption, '_checkQpdfVersion').mockResolvedValue();
       
       // Reset the value to ensure the test is valid
       qpdfDecryption.isQpdfAvailable = false;
