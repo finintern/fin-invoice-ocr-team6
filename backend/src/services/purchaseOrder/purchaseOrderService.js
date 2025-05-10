@@ -313,12 +313,9 @@ class PurchaseOrderService extends FinancialDocumentService {
         map(result => {
           if (result === 0) {
             const err = new Error(`Failed to delete purchase order with ID: ${id}`);
-            // Hanya log jika error belum dilog sebelumnya
-            if (!err.logged) {
-              PurchaseOrderLogger.logDeletionError(id, err);
-              // Tandai error sudah dilog
-              err.logged = true;
-            }
+            // Always log error and mark as logged
+            PurchaseOrderLogger.logDeletionError(id, err);
+            err.logged = true;
             Sentry.captureException(err);
             throw err;
           }
@@ -327,12 +324,9 @@ class PurchaseOrderService extends FinancialDocumentService {
           return { message: "Purchase order successfully deleted" };
         }),
         catchError(error => {
-          // Hanya log jika error belum dilog sebelumnya
-          if (!error.logged) {
-            PurchaseOrderLogger.logDeletionError(id, error);
-            // Tandai error sudah dilog
-            error.logged = true;
-          }
+          // Always log error and mark as logged
+          PurchaseOrderLogger.logDeletionError(id, error);
+          error.logged = true;
           Sentry.captureException(error);
           throw error;
         })
