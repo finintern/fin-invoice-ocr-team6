@@ -2,6 +2,7 @@ const DocumentStatus = require("../models/enums/DocumentStatus");
 const InvoiceRepository = require("../repositories/invoiceRepository");
 const PurchaseOrderRepository = require("../repositories/purchaseOrderRepository");
 const { ValidationError, NotFoundError, ForbiddenError } = require('../utils/errors');
+const PurchaseOrderLogger = require('./purchaseOrder/purchaseOrderLogger');
 
 /**
  * Class for handling invoice deletion validation logic
@@ -52,21 +53,37 @@ class ValidateDeletion {
    */
   async validatePurchaseOrderDeletion(partnerId, purchaseOrderId) {
     if (!purchaseOrderId) {
-      throw new ValidationError("Invalid purchase order ID");
+      const error = new ValidationError("Invalid purchase order ID");
+      PurchaseOrderLogger.logDeletionError(purchaseOrderId || 'undefined', error);
+      // Mark this error as already logged to prevent duplicate logging
+      error.logged = true;
+      throw error;
     }
 
     const purchaseOrder = await this.purchaseOrderRepository.findById(purchaseOrderId);
 
     if (!purchaseOrder) {
-      throw new NotFoundError("Purchase order not found");
+      const error = new NotFoundError("Purchase order not found");
+      PurchaseOrderLogger.logDeletionError(purchaseOrderId, error);
+      // Mark this error as already logged to prevent duplicate logging
+      error.logged = true;
+      throw error;
     }
 
     if (purchaseOrder.partner_id !== partnerId) {
-      throw new ForbiddenError("Unauthorized: You do not own this purchase order");
+      const error = new ForbiddenError("Unauthorized: You do not own this purchase order");
+      PurchaseOrderLogger.logDeletionError(purchaseOrderId, error);
+      // Mark this error as already logged to prevent duplicate logging
+      error.logged = true;
+      throw error;
     }
 
     if (purchaseOrder.status !== DocumentStatus.ANALYZED) {
-      throw new Error("Purchase order cannot be deleted unless it is Analyzed");
+      const error = new Error("Purchase order cannot be deleted unless it is Analyzed");
+      PurchaseOrderLogger.logDeletionError(purchaseOrderId, error);
+      // Mark this error as already logged to prevent duplicate logging
+      error.logged = true;
+      throw error;
     }
 
     return purchaseOrder;
