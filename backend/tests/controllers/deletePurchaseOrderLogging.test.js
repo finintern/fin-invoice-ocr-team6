@@ -68,7 +68,6 @@ describe("PurchaseOrderController - Delete with Logging", () => {
   const purchaseOrderService = require("../../src/services/purchaseOrder/purchaseOrderService");
   const validateDeletionService = require("../../src/services/validateDeletion");
   const s3Service = require("../../src/services/s3Service");
-  const Sentry = require("../../src/instrument");
 
   beforeEach(() => {
     // Reset all mocks

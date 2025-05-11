@@ -5,9 +5,7 @@ describe('PurchaseOrderLogger Coverage Tests', () => {
   let originalInstance;
   
   // Create spies for the instance methods
-  let infoSpy;
   let errorSpy;
-  let warnSpy;
   let createMetadataSpy;
   
   beforeAll(() => {
@@ -19,9 +17,7 @@ describe('PurchaseOrderLogger Coverage Tests', () => {
     
     // Get new instance and create spies
     const instance = PurchaseOrderLogger.getInstance();
-    infoSpy = jest.spyOn(instance, 'info');
     errorSpy = jest.spyOn(instance, 'error');
-    warnSpy = jest.spyOn(instance, 'warn');
     createMetadataSpy = jest.spyOn(instance, 'createMetadata');
   });
   

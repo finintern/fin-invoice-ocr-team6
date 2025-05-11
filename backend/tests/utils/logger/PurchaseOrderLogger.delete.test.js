@@ -1,5 +1,4 @@
 const PurchaseOrderLogger = require('../../../src/utils/logger/PurchaseOrderLogger');
-const BaseLogger = require('../../../src/utils/logger/BaseLogger');
 
 // Mock the BaseLogger methods
 jest.mock('../../../src/utils/logger/BaseLogger', () => {
