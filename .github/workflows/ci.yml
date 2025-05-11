@@ -124,6 +124,7 @@ jobs:
   deploy:
     name: Deploy to Staging
     runs-on: ubuntu-latest
+    needs: test
     if: github.ref == 'refs/heads/staging'
     steps:
       - name: Checkout Repository
