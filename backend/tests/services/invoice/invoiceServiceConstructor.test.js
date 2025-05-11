@@ -7,6 +7,7 @@ const AzureDocumentAnalyzer = require('../../../src/services/analysis/azureDocum
 const InvoiceValidator = require('../../../src/services/invoice/invoiceValidator');
 const InvoiceResponseFormatter = require('../../../src/services/invoice/invoiceResponseFormatter');
 const { AzureInvoiceMapper } = require('../../../src/services/invoiceMapperService/invoiceMapperService');
+const { OcrAnalyzerFactory } = require('../../../src/services/analysis');
 
 // Mock all dependencies
 jest.mock('../../../src/repositories/invoiceRepository');
@@ -20,11 +21,31 @@ jest.mock('../../../src/services/invoiceMapperService/invoiceMapperService', () 
     AzureInvoiceMapper: jest.fn()
 }));
 jest.mock('../../../src/services/s3Service');
+jest.mock('../../../src/services/analysis', () => ({
+    OcrAnalyzerFactory: {
+        createAnalyzer: jest.fn().mockReturnValue({
+            analyzeDocument: jest.fn()
+        })
+    }
+}));
 
 describe('InvoiceService Constructor', () => {
+    // Save original environment
+    const originalEnv = process.env;
+    
     // Reset all mocks before each test
     beforeEach(() => {
         jest.clearAllMocks();
+        // Only set up the factory mock for tests that don't provide a custom documentAnalyzer
+        OcrAnalyzerFactory.createAnalyzer.mockReturnValue(new AzureDocumentAnalyzer());
+        // Reset process.env to clean state for each test
+        process.env = { ...originalEnv };
+        delete process.env.OCR_ANALYZER_TYPE;
+    });
+    
+    // Restore environment after all tests
+    afterAll(() => {
+        process.env = originalEnv;
     });
 
     test('should create instance with default dependencies when no parameters provided', () => {
@@ -106,6 +127,9 @@ describe('InvoiceService Constructor', () => {
     });
 
     test('should use all custom dependencies when all are provided', () => {
+        // Clear previous mock return value from beforeEach
+        jest.clearAllMocks();
+        
         // Arrange
         const mockDependencies = {
             invoiceRepository: { findById: jest.fn() },
@@ -144,4 +168,18 @@ describe('InvoiceService Constructor', () => {
         expect(service.azureMapper).toBe(mockDependencies.azureMapper);
         expect(service.logger).toBe(mockDependencies.logger);
     });
+
+    test('should default to "azure" ocrType when no OCR type is provided', () => {
+        // Ensure OCR_ANALYZER_TYPE is deleted from env
+        delete process.env.OCR_ANALYZER_TYPE;
+        
+        // Create service with no ocrType specified
+        const service = new InvoiceService({});
+        
+        // Verify ocrType defaults to 'azure'
+        expect(service.ocrType).toBe('azure');
+        
+        // Verify the OcrAnalyzerFactory was called with 'azure'
+        expect(OcrAnalyzerFactory.createAnalyzer).toHaveBeenCalledWith('azure', expect.any(Object));
+    }); 
 });

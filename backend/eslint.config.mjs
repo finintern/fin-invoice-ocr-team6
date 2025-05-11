@@ -16,6 +16,13 @@ export default [
         ...globals.node,
         ...globals.jest 
       }
+    },
+    rules: {
+      // Allow unused parameters if they start with underscore
+      "no-unused-vars": ["error", {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }]
     }
   },
   // Add this new configuration object for k6 load test files

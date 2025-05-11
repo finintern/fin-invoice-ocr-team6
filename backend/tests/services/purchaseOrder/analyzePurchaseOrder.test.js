@@ -9,6 +9,15 @@ jest.mock('../../../src/services/analysis/azureDocumentAnalyzer', () => {
   });
 });
 
+// Mock OcrAnalyzerFactory
+jest.mock('../../../src/services/analysis', () => ({
+  OcrAnalyzerFactory: {
+    createAnalyzer: jest.fn().mockReturnValue({
+      analyzeDocument: jest.fn()
+    })
+  }
+}));
+
 // Mock other dependencies
 jest.mock('../../../src/repositories/purchaseOrderRepository');
 jest.mock('../../../src/repositories/customerRepository');
@@ -17,6 +26,7 @@ jest.mock('../../../src/repositories/itemRepository');
 jest.mock('../../../src/services/purchaseOrder/purchaseOrderValidator');
 jest.mock('../../../src/services/purchaseOrder/purchaseOrderResponseFormatter');
 jest.mock('../../../src/services/purchaseOrderMapperService/purchaseOrderMapperService');
+jest.mock('../../../src/services/s3Service');
 
 describe('analyzePurchaseOrder', () => {
   beforeEach(() => {
