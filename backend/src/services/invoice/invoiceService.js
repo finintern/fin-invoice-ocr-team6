@@ -15,6 +15,9 @@ const DocumentStatus = require('../../models/enums/DocumentStatus.js');
 const { NotFoundError } = require('../../utils/errors.js');
 const fs = require('fs').promises;
 const path = require('path');
+const InvoiceLogger = require('./invoiceLogger.js'); 
+
+
 
 class InvoiceService extends FinancialDocumentService {
   constructor(dependencies = {}) {
@@ -249,26 +252,32 @@ class InvoiceService extends FinancialDocumentService {
   }
 
   getInvoiceById(invoiceId) {
+    InvoiceLogger.logRetrievalStart(invoiceId);
+    
     return from(this.invoiceRepository.findById(invoiceId)).pipe(
       switchMap(invoice => {
         if (!invoice) {
-          return throwError(() => new NotFoundError("Invoice not found"));
+          const error = new NotFoundError("Invoice not found");
+          InvoiceLogger.logRetrievalError(invoiceId, error, 'NOT_FOUND');
+          return throwError(() => error);
         }
-  
+
         if (invoice.status === DocumentStatus.PROCESSING) {
+          InvoiceLogger.logRetrievalProcessing(invoiceId);
           return of({
             message: "Invoice is still being processed. Please try again later.",
             data: { documents: [] }
           });
         }
-  
+
         if (invoice.status === DocumentStatus.FAILED) {
+          InvoiceLogger.logRetrievalFailed(invoiceId);
           return of({
             message: "Invoice processing failed. Please re-upload the document.",
             data: { documents: [] }
           });
         }
-  
+
         const items$ = from(this.itemRepository.findItemsByDocumentId(invoiceId, 'Invoice'));
         const customer$ = invoice.customer_id 
           ? from(this.customerRepository.findById(invoice.customer_id)) 
@@ -276,18 +285,26 @@ class InvoiceService extends FinancialDocumentService {
         const vendor$ = invoice.vendor_id 
           ? from(this.vendorRepository.findById(invoice.vendor_id)) 
           : of(null);
-  
+
         return forkJoin({ items: items$, customer: customer$, vendor: vendor$ }).pipe(
-          map(({ items, customer, vendor }) => 
-            this.responseFormatter.formatInvoiceResponse(invoice, items, customer, vendor)
-          )
+          map(({ items, customer, vendor }) => {
+            const summary = {
+              hasItems: items && items.length > 0,
+              hasCustomer: !!customer,
+              hasVendor: !!vendor,
+              status: invoice.status
+            };
+            
+            InvoiceLogger.logRetrievalSuccess(invoiceId, summary);
+            return this.responseFormatter.formatInvoiceResponse(invoice, items, customer, vendor);
+          })
         );
       }),
       catchError(error => {
-        console.error("Error retrieving invoice:", error);
-        return throwError(() => 
-          error.message === "Invoice not found" 
-            ? error 
+        InvoiceLogger.logRetrievalError(invoiceId, error, 'DATABASE_ERROR');
+        return throwError(() =>
+          error.message === "Invoice not found"
+            ? error
             : new Error("Failed to retrieve invoice: " + error.message)
         );
       })
@@ -301,17 +318,21 @@ class InvoiceService extends FinancialDocumentService {
         map(result => {
           if (result === 0) {
             const err = new Error(`Failed to delete invoice with ID: ${id}`);
+            InvoiceLogger.logDeletionError(id, err, 'DELETE_DB');
             Sentry.captureException(err);
             throw err;
           }
-          return { message: "Invoice successfully deleted" };
+          InvoiceLogger.logDatabaseDeletionSuccess(id);
+          return { message: 'Invoice successfully deleted' };
         }),
         catchError(error => {
+          InvoiceLogger.logDeletionError(id, error, 'DELETE_DB');
           Sentry.captureException(error);
-          throw new Error("Failed to delete invoice: " + error.message);
+          throw new Error('Failed to delete invoice: ' + error.message);
         })
       );
   }
+  
     
   async getInvoiceStatus(invoiceId) {
     try {
