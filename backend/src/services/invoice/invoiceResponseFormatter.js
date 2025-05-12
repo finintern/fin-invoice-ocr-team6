@@ -1,19 +1,27 @@
 const DocumentStatus = require('../../models/enums/DocumentStatus.js');
 class InvoiceResponseFormatter {
   formatStatusResponse(invoice, status, customMessage = null) {
+    // Check if status exists in the statusMessages map, if not, use customMessage
     const statusMessages = {
-      [DocumentStatus.PROCESSING]: customMessage || "Invoice is still being processed. Please try again later.",
-      [DocumentStatus.FAILED]: customMessage || "Invoice processing failed. Please re-upload the document.",
+      [DocumentStatus.PROCESSING]: "Invoice is still being processed. Please try again later.",
+      [DocumentStatus.FAILED]: "Invoice processing failed. Please re-upload the document.",
     };
 
+    // Use custom message if provided, otherwise fallback to status message
+    const message = customMessage || statusMessages[status];
+
+    // Safely access file_url with null checks
+    const fileUrl = invoice && invoice.file_url ? invoice.file_url : null;
+
     return {
-      message: statusMessages[status],
-      data: { 
+      message: message,
+      data: {
         documents: [],
-        documentUrl: invoice.file_url || null
+        documentUrl: fileUrl
       }
     };
   }
+
   formatInvoiceResponse(invoice, items, customer, vendor) {
     const formattedInvoice = {
       header: {
