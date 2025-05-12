@@ -256,11 +256,11 @@ class InvoiceService extends FinancialDocumentService {
         }
 
         if (invoice.status === DocumentStatus.PROCESSING) {
-          return of(this.responseFormatter.formatStatusResponse(DocumentStatus.PROCESSING));
+          return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.PROCESSING));
         }
 
         if (invoice.status === DocumentStatus.FAILED) {
-          return of(this.responseFormatter.formatStatusResponse(DocumentStatus.FAILED));
+          return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.FAILED));
         }
 
         const items$ = from(this.itemRepository.findItemsByDocumentId(invoiceId, 'Invoice'));
