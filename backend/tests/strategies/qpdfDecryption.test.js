@@ -17,6 +17,21 @@ jest.mock('fs', () => ({
   lstatSync: jest.fn().mockReturnValue({ isDirectory: jest.fn().mockReturnValue(false) })
 }));
 
+// Mock the PDFLogger
+jest.mock('../../src/services/pdfLoggerAdapter', () => ({
+  logDecryptionStart: jest.fn(),
+  logDecryptionSuccess: jest.fn(),
+  logDecryptionError: jest.fn(),
+  logDecryptionAvailability: jest.fn()
+}));
+
+// Mock Sentry
+jest.mock('../../src/instrument', () => ({
+  addBreadcrumb: jest.fn(),
+  captureException: jest.fn(),
+  configureScope: jest.fn()
+}));
+
 // Helper to create standardized spawn process mocks
 const createMockProcess = (options = {}) => {
   const {
