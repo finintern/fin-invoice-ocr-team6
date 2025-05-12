@@ -54,7 +54,7 @@ class ValidateDeletion {
   async validatePurchaseOrderDeletion(partnerId, purchaseOrderId) {
     if (!purchaseOrderId) {
       const error = new ValidationError("Invalid purchase order ID");
-      PurchaseOrderLogger.logDeletionError(purchaseOrderId || 'undefined', error);
+      PurchaseOrderLogger.logDeletionError(purchaseOrderId === undefined ? 'undefined' : purchaseOrderId, error);
       // Mark this error as already logged to prevent duplicate logging
       error.logged = true;
       throw error;
