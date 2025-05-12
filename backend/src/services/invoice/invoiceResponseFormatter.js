@@ -1,6 +1,6 @@
 const DocumentStatus = require('../../models/enums/DocumentStatus.js');
 class InvoiceResponseFormatter {
-  formatStatusResponse(status, customMessage = null) {
+  formatStatusResponse(invoice, status, customMessage = null) {
     const statusMessages = {
       [DocumentStatus.PROCESSING]: customMessage || "Invoice is still being processed. Please try again later.",
       [DocumentStatus.FAILED]: customMessage || "Invoice processing failed. Please re-upload the document.",
@@ -8,7 +8,10 @@ class InvoiceResponseFormatter {
 
     return {
       message: statusMessages[status],
-      data: { documents: [] }
+      data: { 
+        documents: [],
+        documentUrl: invoice.file_url || null
+      }
     };
   }
   formatInvoiceResponse(invoice, items, customer, vendor) {
@@ -39,7 +42,8 @@ class InvoiceResponseFormatter {
 
     return {
       data: {
-        documents: [formattedInvoice]
+        documents: [formattedInvoice],
+        documentUrl: invoice.file_url || null
       }
     };
   }
