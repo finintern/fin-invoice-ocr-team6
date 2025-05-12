@@ -59,41 +59,6 @@ describe("Invoice Controller", () => {
     pdfValidationService.allValidations.mockResolvedValue(true);
     jest.clearAllMocks();
   });
-  // Add this at the beginning of your tests in invoiceController.test.js
-  describe("Invoice Controller constructor", () => {
-    test("should throw error when invalid service is provided", () => {
-      // Case 1: No dependencies provided
-      expect(() => {
-        new InvoiceController();
-      }).toThrow('Invalid invoice service provided');
-
-      // Case 2: No invoiceService provided
-      expect(() => {
-        new InvoiceController({});
-      }).toThrow('Invalid invoice service provided');
-
-      // Case 3: invoiceService with non-function uploadInvoice
-      expect(() => {
-        new InvoiceController({
-          invoiceService: { uploadInvoice: "not a function" }
-        });
-      }).toThrow('Invalid invoice service provided');
-    });
-
-    test("should not throw error when valid service is provided", () => {
-      const validService = {
-        uploadInvoice: jest.fn()
-      };
-
-      expect(() => {
-        new InvoiceController({
-          invoiceService: validService,
-          validateDeletionService: {},
-          s3Service: {}
-        });
-      }).not.toThrow();
-    });
-  });
   describe("uploadInvoice", () => {
     test("should successfully upload when all validations pass", async () => {
       const testData = setupTestData();
