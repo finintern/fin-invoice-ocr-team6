@@ -3,6 +3,7 @@ const Sentry = require("../instrument");
 const { ValidationError, AuthError, ForbiddenError } = require('../utils/errors');
 const { from, of, EMPTY, throwError } = require('rxjs');
 const { catchError, mergeMap, tap, switchMap, map} = require('rxjs/operators');
+const InvoiceLogger = require('../services/invoice/invoiceLogger');
 
 class InvoiceController extends FinancialDocumentController {
   /**
@@ -147,74 +148,80 @@ class InvoiceController extends FinancialDocumentController {
     }
   }
 
- /**
-   * Deletes an invoice by its ID.
-   *
-   * @param {Object} req - The request object containing parameters and user info.
-   * @param {Object} res - The response object used to send status and messages.
-   * @returns {Promise<Response>} The response indicating success or failure.
-   */
- deleteInvoiceById(req, res) {
-  const { id } = req.params;
+  deleteInvoiceById(req, res) {
+    const { id } = req.params;
+    const partnerId = req.user.uuid;
   
-  Sentry.addBreadcrumb({
-    category: "invoiceDeletion",
-    message: `Partner ${req.user.uuid} attempting to delete invoice ${id}`,
-    level: "info"
-  });
-
-  from(validateDeletion.validateInvoiceDeletion(req.user.uuid, id))
-    .pipe(
-      mergeMap(invoice => {
-        if (invoice.file_url) {
-          const fileKey = invoice.file_url.split('/').pop();
-          return from(s3Service.deleteFile(fileKey)).pipe(
-            mergeMap(deleteResult => {
-              console.log("File deleted from S3:", deleteResult);
-              if (!deleteResult.success) {
-                const err = new Error("Failed to delete file from S3");
-                Sentry.captureException(err);
-                return throwError(() => ({ status: 500, message: err.message, error: deleteResult.error }));
-              }
-              return of(invoice);
-            })
-          );
-        }
-        return of(invoice);
-      }),
-      
-      mergeMap(() => InvoiceService.deleteInvoiceById(id)),
-      
-      tap(() => {
-        Sentry.captureMessage(`Invoice ${id} successfully deleted by ${req.user.uuid}`);
-      }),
-      
-      catchError(error => {
-        console.error("Error deleting invoice:", error);
-        Sentry.captureException(error);
-        
-        if (error.message === "Invoice not found") {
-          return of({ status: 404, message: error.message });
-        }
-        if (error.message === "Unauthorized: You do not own this invoice") {
-          return of({ status: 403, message: error.message });
-        }
-        if (error.message === "Invoice cannot be deleted unless it is Analyzed") {
-          return of({ status: 409, message: error.message });
-        }
-        
-        return of({ status: 500, message: "Internal server error" });
-      })
-    )
-    .subscribe({
-      next: (result) => {
-        if (result.status) {
-          return res.status(result.status).json({ message: result.message, error: result.error });
-        }
-        return res.status(200).json({ message: "Invoice successfully deleted" });
-      }
+    Sentry.addBreadcrumb({
+      category: 'invoiceDeletion',
+      message: `Partner ${partnerId} attempting to delete invoice ${id}`,
+      level: 'info',
     });
+  
+    InvoiceLogger.logDeletionStart(id, partnerId);
+  
+    from(validateDeletion.validateInvoiceDeletion(partnerId, id))
+      .pipe(
+        mergeMap(invoice => {
+          if (invoice.file_url) {
+            const fileKey = invoice.file_url.split('/').pop();
+            return from(s3Service.deleteFile(fileKey)).pipe(
+              mergeMap(deleteResult => {
+                if (!deleteResult.success) {
+                  const err = new Error('Failed to delete file from S3');
+                  InvoiceLogger.logDeletionError(id, err, 'DELETE_S3');
+                  Sentry.captureException(err);
+                  return throwError(() => ({
+                    status: 500,
+                    message: err.message,
+                    error: deleteResult.error,
+                  }));
+                }
+  
+                InvoiceLogger.logS3DeletionSuccess(id, fileKey);
+                return of(invoice);
+              })
+            );
+          }
+          return of(invoice);
+        }),
+  
+        mergeMap(() => InvoiceService.deleteInvoiceById(id)),
+  
+        tap(() => {
+          InvoiceLogger.logDeletionSuccess(id, partnerId);
+          Sentry.captureMessage(`Invoice ${id} successfully deleted by ${partnerId}`);
+        }),
+  
+        catchError(error => {
+          InvoiceLogger.logDeletionError(id, error, 'DELETE_CONTROLLER');
+          Sentry.captureException(error);
+  
+          if (error.message === 'Invoice not found') {
+            return of({ status: 404, message: error.message });
+          }
+          if (error.message === 'Unauthorized: You do not own this invoice') {
+            return of({ status: 403, message: error.message });
+          }
+          if (error.message === 'Invoice cannot be deleted unless it is Analyzed') {
+            return of({ status: 409, message: error.message });
+          }
+  
+          return of({ status: 500, message: 'Internal server error' });
+        })
+      )
+      .subscribe({
+        next: result => {
+          if (result.status) {
+            return res
+              .status(result.status)
+              .json({ message: result.message, error: result.error });
+          }
+          return res.status(200).json({ message: 'Invoice successfully deleted' });
+        },
+      });
   }
+  
 }
 
 // Import dependencies for factory function
