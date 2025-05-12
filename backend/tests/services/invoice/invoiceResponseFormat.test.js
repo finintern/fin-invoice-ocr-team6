@@ -6,7 +6,48 @@ describe('InvoiceResponseFormatter', () => {
     beforeEach(() => {
         formatter = new InvoiceResponseFormatter();
     });
+    // Add this describe block after the existing formatInvoiceResponse tests
+    describe('formatStatusResponse', () => {
+        const DocumentStatus = require('../../../src/models/enums/DocumentStatus');
 
+        test('should format PROCESSING status with default message', () => {
+            const result = formatter.formatStatusResponse(DocumentStatus.PROCESSING);
+
+            expect(result).toEqual({
+                message: "Invoice is still being processed. Please try again later.",
+                data: { documents: [] }
+            });
+        });
+
+        test('should format PROCESSING status with custom message', () => {
+            const customMessage = "Your invoice is currently processing. Check back soon.";
+            const result = formatter.formatStatusResponse(DocumentStatus.PROCESSING, customMessage);
+
+            expect(result).toEqual({
+                message: customMessage,
+                data: { documents: [] }
+            });
+        });
+
+        test('should format FAILED status with default message', () => {
+            const result = formatter.formatStatusResponse(DocumentStatus.FAILED);
+
+            expect(result).toEqual({
+                message: "Invoice processing failed. Please re-upload the document.",
+                data: { documents: [] }
+            });
+        });
+
+        test('should format FAILED status with custom message', () => {
+            const customMessage = "We couldn't process your invoice. Please try again.";
+            const result = formatter.formatStatusResponse(DocumentStatus.FAILED, customMessage);
+
+            expect(result).toEqual({
+                message: customMessage,
+                data: { documents: [] }
+            });
+        });
+    });
     describe('formatInvoiceResponse', () => {
         // Positive case: Full data available
         test('should format invoice data correctly with all data provided', () => {
@@ -144,14 +185,14 @@ describe('InvoiceResponseFormatter', () => {
             ];
 
             const result = formatter.formatInvoiceResponse(invoice, items, null, null);
-            
+
             expect(result.data.documents[0].header.vendor_details).toEqual({
                 name: null,
                 address: "",
                 recipient_name: null,
                 tax_id: null
             });
-            
+
             expect(result.data.documents[0].header.customer_details).toEqual({
                 id: null,
                 name: null,
@@ -233,7 +274,7 @@ describe('InvoiceResponseFormatter', () => {
             };
 
             const result = formatter.formatInvoiceResponse(invoice, [], customer, vendor);
-            
+
             expect(result.data.documents[0].header.vendor_details.address).toBe("");
             expect(result.data.documents[0].header.customer_details.address).toBe("");
         });
