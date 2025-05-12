@@ -37,6 +37,27 @@ class InvoiceLoggerAdapter {
   static logValidationError(invoiceId, error) {
     return InvoiceLogger.getInstance().logValidationError(invoiceId, error);
   }
+
+  static logDeletionStart(invoiceId, partnerId) {
+    return InvoiceLogger.getInstance().logDeletionStart(invoiceId, partnerId);
+  }
+  
+  static logS3DeletionSuccess(invoiceId, fileKey) {
+    return InvoiceLogger.getInstance().logS3DeletionSuccess(invoiceId, fileKey);
+  }
+  
+  static logDatabaseDeletionSuccess(invoiceId) {
+    return InvoiceLogger.getInstance().logDatabaseDeletionSuccess(invoiceId);
+  }
+  
+  static logDeletionSuccess(invoiceId, partnerId) {
+    return InvoiceLogger.getInstance().logDeletionSuccess(invoiceId, partnerId);
+  }
+  
+  static logDeletionError(invoiceId, error, stage) {
+    return InvoiceLogger.getInstance().logDeletionError(invoiceId, error, stage);
+  }
+  
 }
 
 module.exports = InvoiceLoggerAdapter;

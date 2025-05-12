@@ -15,6 +15,9 @@ const DocumentStatus = require('../../models/enums/DocumentStatus.js');
 const { NotFoundError } = require('../../utils/errors.js');
 const fs = require('fs').promises;
 const path = require('path');
+const InvoiceLogger = require('./invoiceLogger.js'); 
+
+
 
 class InvoiceService extends FinancialDocumentService {
   constructor(dependencies = {}) {
@@ -301,17 +304,21 @@ class InvoiceService extends FinancialDocumentService {
         map(result => {
           if (result === 0) {
             const err = new Error(`Failed to delete invoice with ID: ${id}`);
+            InvoiceLogger.logDeletionError(id, err, 'DELETE_DB');
             Sentry.captureException(err);
             throw err;
           }
-          return { message: "Invoice successfully deleted" };
+          InvoiceLogger.logDatabaseDeletionSuccess(id);
+          return { message: 'Invoice successfully deleted' };
         }),
         catchError(error => {
+          InvoiceLogger.logDeletionError(id, error, 'DELETE_DB');
           Sentry.captureException(error);
-          throw new Error("Failed to delete invoice: " + error.message);
+          throw new Error('Failed to delete invoice: ' + error.message);
         })
       );
   }
+  
     
   async getInvoiceStatus(invoiceId) {
     try {
