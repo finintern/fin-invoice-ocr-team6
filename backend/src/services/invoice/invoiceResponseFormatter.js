@@ -10,8 +10,8 @@ class InvoiceResponseFormatter {
     // Use custom message if provided, otherwise fallback to status message
     const message = customMessage || statusMessages[status];
 
-    // Safely access file_url with null checks
-    const fileUrl = invoice && invoice.file_url ? invoice.file_url : null;
+    // Safely access file_url with optional chaining
+    const fileUrl = invoice?.file_url ?? null;
 
     return {
       message: message,
