@@ -301,4 +301,119 @@ describe('InvoiceLogger', () => {
       })
     );
   });
+
+  it('should log retrieval start', () => {
+    const invoiceId = 'inv12345';
+    
+    instance.logRetrievalStart(invoiceId);
+    
+    expect(instance.info).toHaveBeenCalledWith(
+      'Invoice retrieval initiated',
+      expect.objectContaining({
+        invoiceId,
+        event: 'GET_INVOICE_START'
+      })
+    );
+  });
+
+  it('should log retrieval success with summary data', () => {
+    const invoiceId = 'inv12345';
+    const summary = {
+      hasItems: true,
+      hasCustomer: true,
+      hasVendor: false,
+      status: 'COMPLETED'
+    };
+    
+    instance.logRetrievalSuccess(invoiceId, summary);
+    
+    expect(instance.info).toHaveBeenCalledWith(
+      'Invoice retrieved successfully',
+      expect.objectContaining({
+        invoiceId,
+        summary,
+        event: 'GET_INVOICE_SUCCESS'
+      })
+    );
+  });
+
+  it('should log retrieval success with empty summary', () => {
+    const invoiceId = 'inv12345';
+    
+    instance.logRetrievalSuccess(invoiceId);
+    
+    expect(instance.info).toHaveBeenCalledWith(
+      'Invoice retrieved successfully',
+      expect.objectContaining({
+        invoiceId,
+        summary: {},
+        event: 'GET_INVOICE_SUCCESS'
+      })
+    );
+  });
+
+  it('should log retrieval processing state', () => {
+    const invoiceId = 'inv12345';
+    
+    instance.logRetrievalProcessing(invoiceId);
+    
+    expect(instance.info).toHaveBeenCalledWith(
+      'Retrieved invoice still in processing state',
+      expect.objectContaining({
+        invoiceId,
+        event: 'GET_INVOICE_PROCESSING'
+      })
+    );
+  });
+
+  it('should log retrieval failed state', () => {
+    const invoiceId = 'inv12345';
+    
+    instance.logRetrievalFailed(invoiceId);
+    
+    expect(instance.warn).toHaveBeenCalledWith(
+      'Retrieved invoice has failed processing',
+      expect.objectContaining({
+        invoiceId,
+        event: 'GET_INVOICE_FAILED'
+      })
+    );
+  });
+
+  it('should log retrieval error with complete error object', () => {
+    const invoiceId = 'inv12345';
+    const error = new Error('Database connection failed');
+    const stage = 'database-query';
+    
+    instance.logRetrievalError(invoiceId, error, stage);
+    
+    expect(instance.error).toHaveBeenCalledWith(
+      'Error during invoice retrieval',
+      expect.objectContaining({
+        invoiceId,
+        error: error.message,
+        stack: error.stack,
+        stage,
+        event: 'GET_INVOICE_ERROR'
+      })
+    );
+  });
+
+  it('should log retrieval error with null error object', () => {
+    const invoiceId = 'inv12345';
+    const stage = 'database-query';
+    
+    instance.logRetrievalError(invoiceId, null, stage);
+    
+    expect(instance.error).toHaveBeenCalledWith(
+      'Error during invoice retrieval',
+      expect.objectContaining({
+        invoiceId,
+        error: 'Unknown error',
+        stack: '',
+        stage,
+        event: 'GET_INVOICE_ERROR'
+      })
+    );
+  });
 });
