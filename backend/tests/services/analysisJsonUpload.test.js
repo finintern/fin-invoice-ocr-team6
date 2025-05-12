@@ -288,14 +288,15 @@ describe('InvoiceService - processInvoiceAsync with JSON upload', () => {
       } catch (error) {
         // When mapping fails, we should set status to "Failed"
         await Invoice.update({ status: DocumentStatus.FAILED }, { where: { id: invoiceId } });
-        // Just return, don't throw, so test can continue
-        return null;
+        // Propagate the error instead of silently returning null
+        throw error;
       }
     });
     
-    await invoiceService.processInvoiceAsync(
+    // Expect the process to throw an error and catch it
+    await expect(invoiceService.processInvoiceAsync(
       mockInvoiceId, mockBuffer, mockPartnerId, mockOriginalname, mockUuid
-    );
+    )).rejects.toThrow('Invalid analysis structure');
     
     // Verify upload was still attempted with incomplete result
     expect(FinancialDocumentService.prototype.uploadAnalysisResults)
