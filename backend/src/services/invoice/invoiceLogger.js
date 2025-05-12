@@ -57,6 +57,26 @@ class InvoiceLoggerAdapter {
   static logDeletionError(invoiceId, error, stage) {
     return InvoiceLogger.getInstance().logDeletionError(invoiceId, error, stage);
   }
+
+   static logRetrievalStart(invoiceId) {
+    return InvoiceLogger.getInstance().logRetrievalStart(invoiceId);
+  }
+
+  static logRetrievalSuccess(invoiceId, summary) {
+    return InvoiceLogger.getInstance().logRetrievalSuccess(invoiceId, summary);
+  }
+
+  static logRetrievalProcessing(invoiceId) {
+    return InvoiceLogger.getInstance().logRetrievalProcessing(invoiceId);
+  }
+
+  static logRetrievalFailed(invoiceId) {
+    return InvoiceLogger.getInstance().logRetrievalFailed(invoiceId);
+  }
+
+  static logRetrievalError(invoiceId, error, stage) {
+    return InvoiceLogger.getInstance().logRetrievalError(invoiceId, error, stage);
+  }
   
 }
 
