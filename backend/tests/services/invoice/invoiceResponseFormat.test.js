@@ -9,42 +9,69 @@ describe('InvoiceResponseFormatter', () => {
     // Add this describe block after the existing formatInvoiceResponse tests
     describe('formatStatusResponse', () => {
         const DocumentStatus = require('../../../src/models/enums/DocumentStatus');
+        const mockInvoice = {
+            file_url: 'https://example.com/invoice.pdf'
+        };
 
         test('should format PROCESSING status with default message', () => {
-            const result = formatter.formatStatusResponse(DocumentStatus.PROCESSING);
+            const result = formatter.formatStatusResponse(mockInvoice, DocumentStatus.PROCESSING);
 
             expect(result).toEqual({
                 message: "Invoice is still being processed. Please try again later.",
-                data: { documents: [] }
+                data: {
+                    documents: [],
+                    documentUrl: 'https://example.com/invoice.pdf'
+                }
             });
         });
 
         test('should format PROCESSING status with custom message', () => {
             const customMessage = "Your invoice is currently processing. Check back soon.";
-            const result = formatter.formatStatusResponse(DocumentStatus.PROCESSING, customMessage);
+            const result = formatter.formatStatusResponse(mockInvoice, DocumentStatus.PROCESSING, customMessage);
 
             expect(result).toEqual({
                 message: customMessage,
-                data: { documents: [] }
+                data: {
+                    documents: [],
+                    documentUrl: 'https://example.com/invoice.pdf'
+                }
             });
         });
 
         test('should format FAILED status with default message', () => {
-            const result = formatter.formatStatusResponse(DocumentStatus.FAILED);
+            const result = formatter.formatStatusResponse(mockInvoice, DocumentStatus.FAILED);
 
             expect(result).toEqual({
                 message: "Invoice processing failed. Please re-upload the document.",
-                data: { documents: [] }
+                data: {
+                    documents: [],
+                    documentUrl: 'https://example.com/invoice.pdf'
+                }
             });
         });
 
         test('should format FAILED status with custom message', () => {
             const customMessage = "We couldn't process your invoice. Please try again.";
-            const result = formatter.formatStatusResponse(DocumentStatus.FAILED, customMessage);
+            const result = formatter.formatStatusResponse(mockInvoice, DocumentStatus.FAILED, customMessage);
 
             expect(result).toEqual({
                 message: customMessage,
-                data: { documents: [] }
+                data: {
+                    documents: [],
+                    documentUrl: 'https://example.com/invoice.pdf'
+                }
+            });
+        });
+
+        test('should handle null file_url', () => {
+            const result = formatter.formatStatusResponse({}, DocumentStatus.PROCESSING);
+
+            expect(result).toEqual({
+                message: "Invoice is still being processed. Please try again later.",
+                data: {
+                    documents: [],
+                    documentUrl: null
+                }
             });
         });
     });
@@ -62,7 +89,8 @@ describe('InvoiceResponseFormatter', () => {
                 total_amount: 1000,
                 subtotal_amount: 900,
                 discount_amount: 50,
-                tax_amount: 150
+                tax_amount: 150,
+                file_url: 'https://example.com/invoice.pdf'
             };
 
             const items = [
@@ -150,7 +178,8 @@ describe('InvoiceResponseFormatter', () => {
                                 }
                             ]
                         }
-                    ]
+                    ],
+                    documentUrl: "https://example.com/invoice.pdf"
                 }
             };
 
