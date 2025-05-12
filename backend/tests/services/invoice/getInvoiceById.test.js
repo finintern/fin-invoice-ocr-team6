@@ -66,7 +66,7 @@ describe('InvoiceService - getInvoiceById', () => {
 
     mockResponseFormatter = {
       formatInvoiceResponse: jest.fn(),
-      formatStatusResponse: jest.fn()
+      formatStatusResponse: jest.fn() // Add this mock
     };
 
     // Create invoice service with mocked dependencies
@@ -78,39 +78,32 @@ describe('InvoiceService - getInvoiceById', () => {
       responseFormatter: mockResponseFormatter
     });
   });
-
   // Positive test cases
 
-  test('should return processing message when invoice status is PROCESSING', (done) => {
-    const processingInvoice = { ...sampleInvoice, status: DocumentStatus.PROCESSING };
-    mockInvoiceRepository.findById.mockResolvedValue(processingInvoice);
+  test('should return formatted invoice data when invoice exists and is analyzed', (done) => {
+    // Arrange
+    mockInvoiceRepository.findById.mockResolvedValue(sampleInvoice);
+    mockItemRepository.findItemsByDocumentId.mockResolvedValue(sampleItems);
+    mockCustomerRepository.findById.mockResolvedValue(sampleCustomer);
+    mockVendorRepository.findById.mockResolvedValue(sampleVendor);
+    mockResponseFormatter.formatInvoiceResponse.mockReturnValue(formattedResponse);
 
-    mockResponseFormatter.formatStatusResponse.mockReturnValue({
-      message: "Invoice is still being processed. Please try again later.",
-      data: {
-        documents: [],
-        documentUrl: 'https://example.com/invoice.pdf'
-      }
-    });
-
-    invoiceService.getInvoiceById(processingInvoice.id).subscribe({
+    // Act
+    invoiceService.getInvoiceById(sampleInvoice.id).subscribe({
       next: (result) => {
-        expect(result).toEqual({
-          message: "Invoice is still being processed. Please try again later.",
-          data: {
-            documents: [],
-            documentUrl: 'https://example.com/invoice.pdf'
-          }
-        });
-        expect(mockResponseFormatter.formatStatusResponse).toHaveBeenCalledWith(
-          processingInvoice,
-          DocumentStatus.PROCESSING
+        // Assert
+        expect(mockInvoiceRepository.findById).toHaveBeenCalledWith(sampleInvoice.id);
+        expect(mockItemRepository.findItemsByDocumentId).toHaveBeenCalledWith(sampleInvoice.id, 'Invoice');
+        expect(mockCustomerRepository.findById).toHaveBeenCalledWith(sampleInvoice.customer_id);
+        expect(mockVendorRepository.findById).toHaveBeenCalledWith(sampleInvoice.vendor_id);
+        expect(mockResponseFormatter.formatInvoiceResponse).toHaveBeenCalledWith(
+          sampleInvoice, sampleItems, sampleCustomer, sampleVendor
         );
-        expect(mockItemRepository.findItemsByDocumentId).not.toHaveBeenCalled();
+        expect(result).toEqual(formattedResponse);
         done();
       },
       error: (error) => {
-        done(error);
+        done.fail(`Should not have failed with: ${error}`);
       }
     });
   });
@@ -171,6 +164,86 @@ describe('InvoiceService - getInvoiceById', () => {
       }
     });
   });
+
+  test('should return processing message when invoice status is PROCESSING', (done) => {
+    // Remove the stray 'e' character
+    const processingInvoice = { ...sampleInvoice, status: DocumentStatus.PROCESSING };
+    mockInvoiceRepository.findById.mockResolvedValue(processingInvoice);
+
+    // Mock the formatter response
+    mockResponseFormatter.formatStatusResponse.mockReturnValue({
+      message: "Invoice is still being processed. Please try again later.",
+      data: {
+        documents: [],
+        documentUrl: 'https://example.com/invoice.pdf'
+      }
+    });
+
+    // Act
+    invoiceService.getInvoiceById(processingInvoice.id).subscribe({
+      next: (result) => {
+        // Assert
+        expect(result).toEqual({
+          message: "Invoice is still being processed. Please try again later.",
+          data: {
+            documents: [],
+            documentUrl: 'https://example.com/invoice.pdf'
+          }
+        });
+        expect(mockItemRepository.findItemsByDocumentId).not.toHaveBeenCalled();
+        expect(mockResponseFormatter.formatStatusResponse).toHaveBeenCalledWith(
+          processingInvoice,
+          DocumentStatus.PROCESSING
+        );
+        done();
+      },
+      error: (error) => {
+        // Replace done.fail with done(error)
+        done(error);
+      }
+    });
+  });
+
+  // Fix the failed test
+  test('should return failed message when invoice status is FAILED', (done) => {
+    // Remove the stray 'e' character
+    const failedInvoice = { ...sampleInvoice, status: DocumentStatus.FAILED };
+    mockInvoiceRepository.findById.mockResolvedValue(failedInvoice);
+
+    // Mock the formatter response
+    mockResponseFormatter.formatStatusResponse.mockReturnValue({
+      message: "Invoice processing failed. Please re-upload the document.",
+      data: {
+        documents: [],
+        documentUrl: 'https://example.com/invoice.pdf'
+      }
+    });
+
+    // Act
+    invoiceService.getInvoiceById(failedInvoice.id).subscribe({
+      next: (result) => {
+        // Assert
+        expect(result).toEqual({
+          message: "Invoice processing failed. Please re-upload the document.",
+          data: {
+            documents: [],
+            documentUrl: 'https://example.com/invoice.pdf'
+          }
+        });
+        expect(mockItemRepository.findItemsByDocumentId).not.toHaveBeenCalled();
+        expect(mockResponseFormatter.formatStatusResponse).toHaveBeenCalledWith(
+          failedInvoice,
+          DocumentStatus.FAILED
+        );
+        done();
+      },
+      error: (error) => {
+        // Replace done.fail with done(error)
+        done(error);
+      }
+    });
+  });
+
 
   // Edge cases
 
