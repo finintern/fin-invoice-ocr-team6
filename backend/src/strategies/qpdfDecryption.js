@@ -156,14 +156,14 @@ class QpdfDecryption extends PdfDecryptionStrategy {
             
             if (error.message.toLowerCase().includes('password')) {
                 const passwordError = new Error('Failed to decrypt PDF: Incorrect password.');
-                PDFLogger.logDecryptionError(fileSize, passwordError, 'QPDF');
+                PDFLogger.logDecryptionError(fileSize, passwordError, 'QPDF', processTime);
                 throw passwordError;
             } else if (error.message.includes('PDF header') || error.message.includes('not a PDF')) {
                 const corruptedError = new Error('Failed to decrypt PDF: Corrupted file.');
-                PDFLogger.logDecryptionError(fileSize, corruptedError, 'QPDF');
+                PDFLogger.logDecryptionError(fileSize, corruptedError, 'QPDF', processTime);
                 throw corruptedError;
             } else {
-                PDFLogger.logDecryptionError(fileSize, error, 'QPDF');
+                PDFLogger.logDecryptionError(fileSize, error, 'QPDF', processTime);
                 throw error;  
             }
         } finally {
