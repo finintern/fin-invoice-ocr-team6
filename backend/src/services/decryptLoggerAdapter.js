@@ -5,7 +5,7 @@ const DecryptLogger = require('../utils/logger/DecryptLogger');
  * It maintains backward compatibility with code that expects static class methods
  * while using the new, more SOLID logger implementation under the hood
  */
-class decryptLoggerAdapter {
+class DecryptLoggerAdapter {
   static logDecryptionStart(fileSize, operation) {
     return DecryptLogger.getInstance().logDecryptionStart(fileSize, operation);
   }
@@ -23,4 +23,4 @@ class decryptLoggerAdapter {
   }
 }
 
-module.exports = decryptLoggerAdapter;
+module.exports = DecryptLoggerAdapter;
