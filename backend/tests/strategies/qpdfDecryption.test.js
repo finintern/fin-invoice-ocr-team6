@@ -17,8 +17,8 @@ jest.mock('fs', () => ({
   lstatSync: jest.fn().mockReturnValue({ isDirectory: jest.fn().mockReturnValue(false) })
 }));
 
-// Mock the PDFLogger
-jest.mock('../../src/services/pdfLoggerAdapter', () => ({
+// Mock the DecryptLogger
+jest.mock('../../src/services/decryptLoggerAdapter', () => ({
   logDecryptionStart: jest.fn(),
   logDecryptionSuccess: jest.fn(),
   logDecryptionError: jest.fn(),

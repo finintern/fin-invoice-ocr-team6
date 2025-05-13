@@ -1,8 +1,8 @@
-// filepath: c:\College\6th-Term\PPL\fin-invoice-ocr-team6\backend\tests\utils\logger\PDFLogger.test.js
-const PDFLogger = require('../../../src/utils/logger/PDFLogger');
+// filepath: c:\College\6th-Term\PPL\fin-invoice-ocr-team6\backend\tests\utils\logger\DecryptLogger.test.js
+const DecryptLogger = require('../../../src/utils/logger/DecryptLogger');
 
-// To properly test PDFLogger methods, we need to mock BaseLogger methods
-// while preserving the PDFLogger's own methods
+// To properly test DecryptLogger methods, we need to mock BaseLogger methods
+// while preserving the DecryptLogger's own methods
 jest.mock('../../../src/utils/logger/BaseLogger', () => {
   return class MockBaseLogger {
     constructor() {
@@ -14,20 +14,20 @@ jest.mock('../../../src/utils/logger/BaseLogger', () => {
   };
 });
 
-describe('PDFLogger', () => {
+describe('DecryptLogger', () => {
   let logger;
 
   beforeEach(() => {
     // Reset mocks before each test
     jest.clearAllMocks();
     // Reset the singleton instance between tests
-    PDFLogger.instance = null;
-    logger = PDFLogger.getInstance();
+    DecryptLogger.instance = null;
+    logger = DecryptLogger.getInstance();
   });
 
   test('should implement singleton pattern', () => {
-    const instance1 = PDFLogger.getInstance();
-    const instance2 = PDFLogger.getInstance();
+    const instance1 = DecryptLogger.getInstance();
+    const instance2 = DecryptLogger.getInstance();
     expect(instance1).toBe(instance2);
   });
 

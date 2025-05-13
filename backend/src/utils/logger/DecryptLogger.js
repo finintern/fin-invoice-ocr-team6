@@ -1,13 +1,13 @@
 const BaseLogger = require('./BaseLogger');
 
 /**
- * PDFLogger - Specialized logger for PDF-related operations
+ * DecryptLogger - Specialized logger for PDF-related operations
  * Implements the Singleton pattern for a consistent logger instance
  * and extends the BaseLogger with PDF-specific logging methods
  */
-class PDFLogger extends BaseLogger {
+class DecryptLogger extends BaseLogger {
   /**
-   * Create a new PDFLogger instance
+   * Create a new DecryptLogger instance
    * @private - Use getInstance() instead
    */
   constructor() {
@@ -15,14 +15,14 @@ class PDFLogger extends BaseLogger {
   }
 
   /**
-   * Get the singleton instance of PDFLogger
-   * @returns {PDFLogger} The singleton instance
+   * Get the singleton instance of DecryptLogger
+   * @returns {DecryptLogger} The singleton instance
    */
   static getInstance() {
-    if (!PDFLogger.instance) {
-      PDFLogger.instance = new PDFLogger();
+    if (!DecryptLogger.instance) {
+      DecryptLogger.instance = new DecryptLogger();
     }
-    return PDFLogger.instance;
+    return DecryptLogger.instance;
   }
 
   /**
@@ -91,4 +91,4 @@ class PDFLogger extends BaseLogger {
   }
 }
 
-module.exports = PDFLogger;
+module.exports = DecryptLogger;

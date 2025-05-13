@@ -1,8 +1,8 @@
 const PdfDecryptionService = require('../../src/services/pdfDecryptionService');
 const PdfDecryptionStrategy = require('../../src/strategies/pdfDecryptionStrategy');
 
-// Mock PDFLogger
-jest.mock('../../src/services/pdfLoggerAdapter', () => ({
+// Mock DecryptLogger
+jest.mock('../../src/services/decryptLoggerAdapter', () => ({
   logDecryptionStart: jest.fn(),
   logDecryptionSuccess: jest.fn(),
   logDecryptionError: jest.fn()

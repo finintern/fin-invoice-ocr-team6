@@ -1,4 +1,4 @@
-const PDFLogger = require('./pdfLoggerAdapter');
+const DecryptLogger = require('./decryptLoggerAdapter');
 const Sentry = require("../instrument");
 
 class PdfDecryptionService {
@@ -19,19 +19,19 @@ class PdfDecryptionService {
             });
             
             // Log the start of decryption
-            PDFLogger.logDecryptionStart(fileSize, 'decrypt');
+            DecryptLogger.logDecryptionStart(fileSize, 'decrypt');
             
             // Perform decryption
             const result = await this.decryptionStrategy.decrypt(pdfBuffer, password);
             
             // Log successful decryption
             const processTime = Date.now() - startTime;
-            PDFLogger.logDecryptionSuccess(fileSize, processTime, strategyName);
+            DecryptLogger.logDecryptionSuccess(fileSize, processTime, strategyName);
             
             return result;
         } catch (error) {
             // Log decryption failure
-            PDFLogger.logDecryptionError(fileSize, error, strategyName);
+            DecryptLogger.logDecryptionError(fileSize, error, strategyName);
             
             Sentry.captureException(error);
             
