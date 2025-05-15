@@ -59,7 +59,13 @@ jobs:
 
       - name: Generate Version ID
         run: |
-          echo "VERSION=$(date +'%Y%m%d%H%M%S')-${GITHUB_SHA::8}" >> $GITHUB_ENV
+          VERSION=$(date +'%Y%m%d%H%M%S')-${GITHUB_SHA::8}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "🏷️ Generated Version ID: $VERSION"
+          echo "📝 Details:"
+          echo "   - Branch: ${{ github.ref_name }}"
+          echo "   - Commit: ${GITHUB_SHA::8}"
+          echo "   - Timestamp: $(date +'%Y%m%d%H%M%S')"
 
       - name: Install SSH client
         run: sudo apt-get install openssh-client
