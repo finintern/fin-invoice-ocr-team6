@@ -89,9 +89,15 @@ class s3Service {
             },
             async (span) => {
                 try {
+                    // Create message based on whether documentId exists
+                    let uploadMessage = "Starting JSON upload to S3";
+                    if (documentId) {
+                        uploadMessage += " for document: " + documentId;
+                    }
+                    
                     Sentry.addBreadcrumb({
                         category: "s3",
-                        message: `Starting JSON upload to S3${documentId ? ` for document: ${documentId}` : ''}`,
+                        message: uploadMessage,
                         level: "info",
                     });
 
