@@ -199,7 +199,7 @@ jobs:
             chmod +x ~/fin-invoice-ocr-team6/rollback.sh
             echo "Rollback script updated"
             
-            # Create backup directory if it doesn't exist
+            # Create backup directory if it does not exist
             mkdir -p ~/fin-invoice-ocr-team6/backups
             
             # Check if current symlink exists and points to a valid directory
@@ -306,7 +306,7 @@ jobs:
               bash -x ~/fin-invoice-ocr-team6/rollback.sh || echo "Rollback script failed with exit code $?"
             fi
           '
-
+          
   functional-test:
     name: Run Functional Tests
     runs-on: ubuntu-latest
