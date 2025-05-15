@@ -13,10 +13,6 @@ app.get('/hello', (req, res) => {
   res.send('hi');
 });
 
-app.get('/hi', (req, res) => {
-  res.send('hello');
-});
-
 app.use('/health', healthRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
