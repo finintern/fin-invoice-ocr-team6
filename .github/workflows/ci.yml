@@ -229,7 +229,7 @@ jobs:
               
               # Start or restart PM2 application
               cd ~/fin-invoice-ocr-team6/current/backend
-              pm2 delete invoice-ocr-backend || pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
+              pm2 delete invoice-ocr-backend && pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
               pm2 save
               pm2 list
             '
