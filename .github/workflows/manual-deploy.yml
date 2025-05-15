@@ -1,0 +1,47 @@
+name: Manual Deployment & Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose action to perform"
+        required: true
+        default: "deploy"
+        type: choice
+        options:
+          - deploy
+          - rollback
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+      branch:
+        description: "Branch to deploy (only for deploy action)"
+        required: false
+        default: "staging"
+        type: string
+      rollback_version:
+        description: "Version to rollback to (only for rollback action)"
+        required: false
+        type: string
+
+jobs:
+  placeholder:
+    name: Placeholder for ${{ github.event.inputs.action }} to ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo Selected Parameters
+        run: |
+          echo "Action: ${{ github.event.inputs.action }}"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Branch: ${{ github.event.inputs.branch }}"
+          echo "Rollback Version: ${{ github.event.inputs.rollback_version }}"
+
+      - name: Placeholder Step
+        run: |
+          echo "This is a placeholder workflow for the main branch."
+          echo "The actual deployment and rollback implementation will be added later."
