@@ -49,7 +49,7 @@ describe('PDFDecryptionStrategy', () => {
 
   test('should be properly extended by child classes', () => {
     class ConcreteDecryptionStrategy extends PDFDecryptionStrategy {
-      decrypt(pdfBuffer, password) {
+      decrypt() {
         return Buffer.from('decrypted content');
       }
     }
