@@ -87,11 +87,36 @@ class QpdfDecryption extends PdfDecryptionStrategy {
         });
     }
 
+    sanitizePassword(password) {
+        // Ensure the input is a string
+        if (typeof password !== 'string') {
+            throw new Error('Password must be a string');
+        }
+
+        // Prevent denial-of-service via excessive length
+        const MAX_PASSWORD_LENGTH = 1024;
+        if (password.length > MAX_PASSWORD_LENGTH) {
+            throw new Error(`Password exceeds maximum length of ${MAX_PASSWORD_LENGTH} characters`);
+        }
+
+        // Only allow printable ASCII characters (space to ~)
+        // This prevents shell control characters, escape sequences, etc.
+        const printableAsciiRegex = /^[\x20-\x7E]*$/;
+        if (!printableAsciiRegex.test(password)) {
+            throw new Error('Password contains invalid or unsafe characters');
+        }
+
+        return password;
+    }
+
+
     async decrypt(pdfBuffer, password) {
         if (!Buffer.isBuffer(pdfBuffer)) {
             throw new Error('Invalid input: Expected a Buffer.');
         }
-        
+
+        const sanitizedPassword = this.sanitizePassword(password);
+
         let tempDir = null;
         let inputPath = null;
         let outputPath = null;
@@ -104,9 +129,8 @@ class QpdfDecryption extends PdfDecryptionStrategy {
             outputPath = path.join(tempDir, 'decrypted.pdf');
 
             fs.writeFileSync(inputPath, pdfBuffer);
-
             await this.execCommand('qpdf', [
-                `--password=${password}`,
+                `--password=${sanitizedPassword}`,
                 '--decrypt',
                 inputPath,
                 outputPath
