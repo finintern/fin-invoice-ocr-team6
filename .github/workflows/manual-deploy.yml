@@ -1,0 +1,355 @@
+name: Manual Deployment & Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose action to perform"
+        required: true
+        default: "deploy"
+        type: choice
+        options:
+          - deploy
+          - rollback
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+      branch:
+        description: "Branch to deploy (only for deploy action)"
+        required: false
+        default: "staging"
+        type: string
+      rollback_version:
+        description: "Version to rollback to (only for rollback action)"
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'deploy'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Build Application
+        working-directory: backend
+        run: npm run build
+        env:
+          NODE_ENV: ${{ github.event.inputs.environment }}
+
+      - name: Generate Version ID
+        run: |
+          echo "VERSION=$(date +'%Y%m%d%H%M%S')-${GITHUB_SHA::8}" >> $GITHUB_ENV
+
+      - name: Install SSH client
+        run: sudo apt-get install openssh-client
+
+      - name: Create SSH Key
+        run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
+
+      - name: Update SSH Key Permission
+        run: chmod 400 ssh-key.pem
+
+      - name: Set up Environment Variables
+        run: |
+          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+          echo "NODE_ENV=${{ github.event.inputs.environment }}" >> .env
+          echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> .env
+          echo "CLIENT_SECRET=${{ secrets.CLIENT_SECRET }}" >> .env
+          echo "AZURE_ENDPOINT=${{ secrets.AZURE_ENDPOINT }}" >> .env
+          echo "AZURE_KEY=${{ secrets.AZURE_KEY }}" >> .env
+          echo "AZURE_INVOICE_MODEL=${{ secrets.AZURE_INVOICE_MODEL }}" >> .env
+          echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> .env
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+          echo "DSN=${{ secrets.DSN }}" >> .env
+
+      - name: Setup Release Directory Structure
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
+            # Create releases, backups, and shared directories if they don't exist
+            mkdir -p ~/fin-invoice-ocr-team6/releases
+            mkdir -p ~/fin-invoice-ocr-team6/backups
+            mkdir -p ~/fin-invoice-ocr-team6/shared
+            mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
+          "
+
+      - name: Create Pre-Deployment Backup
+        run: |
+          # Copy rollback script from repository to server
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem backend/scripts/rollback.sh ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/rollback.sh
+
+          # Set permissions and create backup
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            chmod +x ~/fin-invoice-ocr-team6/rollback.sh
+            echo "Rollback script updated"
+            
+            # Create backup directory if it does not exist
+            mkdir -p ~/fin-invoice-ocr-team6/backups
+            
+            # Check if current symlink exists and points to a valid directory
+            if [ -e ~/fin-invoice-ocr-team6/current ] && [ -d "$(readlink -f ~/fin-invoice-ocr-team6/current)" ]; then
+              echo "Creating backup of current deployment"
+              BACKUP_FILE=~/fin-invoice-ocr-team6/backups/backup-$(date +%Y%m%d%H%M%S).tar.gz
+              tar -czf $BACKUP_FILE -C ~/fin-invoice-ocr-team6/current .
+              echo "Backup created at $BACKUP_FILE"
+              
+              # Keep only last 5 backups
+              ls -t ~/fin-invoice-ocr-team6/backups/backup-*.tar.gz | tail -n +6 | xargs rm -f 2>/dev/null || true
+            else
+              echo "No current deployment found to backup"
+            fi
+          '
+
+      - name: Copy Environment File to Server
+        run: |
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
+
+      - name: Deploy to Server
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Create new release directory
+            mkdir -p ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+            
+            # Clone repo into the new release directory
+            cd ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+            git clone --depth 1 -b ${{ github.event.inputs.branch }} https://github.com/${{ github.repository }} .
+            
+            # Install dependencies and build in release directory
+            cd backend
+            npm ci --only=production
+            
+            # Create symbolic link to shared .env file
+            ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            
+            # Create symbolic link to shared uploads directory
+            ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
+            
+            # Run migrations
+            npx sequelize-cli db:migrate --env ${{ github.event.inputs.environment }}
+            
+            # Create release metadata file
+            echo "{
+              \"version\": \"${{ env.VERSION }}\",
+              \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",
+              \"branch\": \"${{ github.event.inputs.branch }}\",
+              \"commit\": \"${{ github.sha }}\",
+              \"actor\": \"${{ github.actor }}\",
+              \"environment\": \"${{ github.event.inputs.environment }}\"
+            }" > ../release.json
+            
+            # Update current symlink to point to the new release
+            ln -sfn ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }} ~/fin-invoice-ocr-team6/current
+            
+            # Show diagnostics
+            echo "Current symlink points to: $(readlink -f ~/fin-invoice-ocr-team6/current)"
+            echo "PM2 processes before restart:"
+            pm2 list
+            
+            # Stop existing process if running
+            pm2 stop invoice-ocr-backend || true
+            pm2 delete invoice-ocr-backend || true
+            
+            # Start with the new code (explicit path)
+            cd ~/fin-invoice-ocr-team6/current/backend
+            pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
+            pm2 save
+            
+            echo "PM2 processes after restart:"
+            pm2 list
+            
+            # Cleanup old releases (keep only the last 5)
+            cd ~/fin-invoice-ocr-team6/releases
+            ls -td */ | tail -n +6 | xargs rm -rf 2>/dev/null || true
+          '
+
+      - name: Verify Deployment
+        run: |
+          # Wait for the application to fully start
+          sleep 5
+
+          # Check health endpoint
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Testing health endpoint..."
+            HEALTH_CHECK=$(curl -s http://localhost:3000/health)
+            echo "Health check response: $HEALTH_CHECK"
+            STATUS=$(echo $HEALTH_CHECK | grep -o "\"status\":\"ok\"" || echo "failed")
+            
+            if [ "$STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Deployment successful!"
+              echo "Deployed version: ${{ env.VERSION }}"
+              echo "Branch: ${{ github.event.inputs.branch }}"
+              echo "Environment: ${{ github.event.inputs.environment }}"
+            else
+              echo "❌ Health check failed! Deployment may have issues."
+              exit 1
+            fi
+          '
+
+  rollback:
+    name: Rollback Application
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'rollback'
+    steps:
+      - name: Install SSH client
+        run: sudo apt-get install openssh-client
+
+      - name: Create SSH Key
+        run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
+
+      - name: Update SSH Key Permission
+        run: chmod 400 ssh-key.pem
+
+      - name: List Available Versions
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Available releases:"
+            ls -la ~/fin-invoice-ocr-team6/releases/ | grep -E "^d" | awk "{print \$9}" | grep -v "^\." | sort -r
+            echo ""
+            echo "Available backups:"
+            ls -la ~/fin-invoice-ocr-team6/backups/ | grep -E "backup-.*\.tar\.gz" | awk "{print \$9}" | sort -r
+            echo ""
+            echo "Current version:"
+            if [ -e ~/fin-invoice-ocr-team6/current ]; then
+              readlink ~/fin-invoice-ocr-team6/current | xargs basename
+              if [ -f ~/fin-invoice-ocr-team6/current/release.json ]; then
+                echo "Current release info:"
+                cat ~/fin-invoice-ocr-team6/current/release.json
+              fi
+            else
+              echo "No current deployment found"
+            fi
+          '
+
+      - name: Perform Rollback
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Choose rollback method based on input
+            if [ -n "${{ github.event.inputs.rollback_version }}" ]; then
+              VERSION="${{ github.event.inputs.rollback_version }}"
+              echo "Rolling back to specified version: $VERSION"
+              
+              # Check if the specified version exists in releases
+              if [ -d ~/fin-invoice-ocr-team6/releases/$VERSION ]; then
+                echo "Found release directory for version $VERSION"
+                
+                # Update current symlink to point to the specified release
+                ln -sfn ~/fin-invoice-ocr-team6/releases/$VERSION ~/fin-invoice-ocr-team6/current
+                
+                # Restart the application
+                echo "Restarting application..."
+                pm2 stop invoice-ocr-backend || true
+                pm2 delete invoice-ocr-backend || true
+                
+                cd ~/fin-invoice-ocr-team6/current/backend
+                pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
+                pm2 save
+                
+                echo "Rollback to version $VERSION completed"
+              else
+                echo "ERROR: Release version $VERSION not found in releases directory"
+                echo "Available versions:"
+                ls ~/fin-invoice-ocr-team6/releases/
+                exit 1
+              fi
+            else
+              echo "No specific version provided, using rollback script for automatic rollback"
+              
+              # Use the existing rollback script
+              if [ -f ~/fin-invoice-ocr-team6/rollback.sh ]; then
+                echo "Executing rollback script..."
+                bash ~/fin-invoice-ocr-team6/rollback.sh
+              else
+                echo "ERROR: Rollback script not found!"
+                echo "Available backup files:"
+                ls -la ~/fin-invoice-ocr-team6/backups/
+                exit 1
+              fi
+            fi
+          '
+
+      - name: Verify Rollback
+        run: |
+          # Wait for the application to fully start
+          sleep 5
+
+          # Check health endpoint and version
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Testing health endpoint..."
+            HEALTH_CHECK=$(curl -s http://localhost:3000/health)
+            echo "Health check response: $HEALTH_CHECK"
+            STATUS=$(echo $HEALTH_CHECK | grep -o "\"status\":\"ok\"" || echo "failed")
+            
+            if [ "$STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Rollback successful!"
+              echo "Current version:"
+              if [ -e ~/fin-invoice-ocr-team6/current ]; then
+                readlink ~/fin-invoice-ocr-team6/current | xargs basename
+                if [ -f ~/fin-invoice-ocr-team6/current/release.json ]; then
+                  echo "Current release info:"
+                  cat ~/fin-invoice-ocr-team6/current/release.json
+                fi
+              fi
+            else
+              echo "❌ Health check failed after rollback!"
+              exit 1
+            fi
+          '
+
+  post-deployment:
+    name: Post Deployment Actions
+    runs-on: ubuntu-latest
+    needs: [deploy, rollback]
+    if: always() && (needs.deploy.result == 'success' || needs.rollback.result == 'success')
+    steps:
+      - name: Send Notification
+        run: |
+          ACTION="${{ github.event.inputs.action }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+
+          if [ "$ACTION" = "deploy" ]; then
+            BRANCH="${{ github.event.inputs.branch }}"
+            MESSAGE="✅ Manual deployment completed successfully
+            - Environment: $ENVIRONMENT
+            - Branch: $BRANCH
+            - Actor: ${{ github.actor }}
+            - Time: $(date -u)"
+          else
+            VERSION="${{ github.event.inputs.rollback_version }}"
+            MESSAGE="🔄 Manual rollback completed successfully
+            - Environment: $ENVIRONMENT
+            - Version: ${VERSION:-'Previous version (automatic)'}
+            - Actor: ${{ github.actor }}
+            - Time: $(date -u)"
+          fi
+
+          echo "$MESSAGE"
+
+          # You can add Slack, Teams, or Discord notifications here
+          # Example for Slack webhook:
+          # curl -X POST -H 'Content-type: application/json' --data '{"text":"'"$MESSAGE"'"}' ${{ secrets.SLACK_WEBHOOK_URL }}
