@@ -290,7 +290,40 @@ describe('QpdfDecryption', () => {
     }));
     await expect(qpdfDecryption.execCommand('qpdf', ['--decrypt'])).rejects.toThrow('Failed to decrypt PDF: Error output');
   });
-  
+
+  describe('sanitizePassword', () => {
+    test('should return the password if it is valid', () => {
+        const input = 'Valid123!@#';
+        const result = qpdfDecryption.sanitizePassword(input);
+        expect(result).toBe(input);
+    });
+
+    test('should reject if input is not a string', () => {
+        expect(() => qpdfDecryption.sanitizePassword(123)).toThrow('Password must be a string');
+        expect(() => qpdfDecryption.sanitizePassword(null)).toThrow('Password must be a string');
+        expect(() => qpdfDecryption.sanitizePassword({})).toThrow('Password must be a string');
+    });
+
+    test('should reject if password is too long', () => {
+        const longPassword = 'a'.repeat(1025);
+        expect(() => qpdfDecryption.sanitizePassword(longPassword)).toThrow('Password exceeds maximum length');
+    });
+
+    test('should reject if password contains non-printable characters', () => {
+        const invalidPassword = 'hello\x00world'; // \x00 = null byte
+        expect(() => qpdfDecryption.sanitizePassword(invalidPassword)).toThrow('Password contains invalid or unsafe characters');
+    });
+
+    test('should reject edge-case printable characters', () => {
+        const edgePassword = ' !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'; // includes ASCII 0x20 to 0x7E
+        expect(qpdfDecryption.sanitizePassword(edgePassword)).toBe(edgePassword);
+    });
+
+    test('should reject if password contains newline', () => {
+        expect(() => qpdfDecryption.sanitizePassword('bad\npass')).toThrow();
+    });
+});
+
   describe('decrypt method', () => {
     const pdfBuffer = Buffer.from('encrypted pdf content');
     const password = 'password123';
