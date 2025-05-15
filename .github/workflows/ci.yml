@@ -122,143 +122,190 @@ jobs:
           echo "Code Coverage Report: https://codecov.io/gh/${REPO_NAME}/branch/${BRANCH_NAME}"
 
   deploy:
-      name: Deploy to Staging
-      runs-on: ubuntu-latest
-      needs: test
-      if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment'
-      steps:
-        - name: Checkout Repository
-          uses: actions/checkout@v4
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-        - name: Set up Node.js 20
-          uses: actions/setup-node@v3
-          with:
-            node-version: "20"
-            cache: "npm"
-            cache-dependency-path: backend/package-lock.json
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
 
-        - name: Install Dependencies
-          working-directory: backend
-          run: npm install
+      - name: Install Dependencies
+        working-directory: backend
+        run: npm install
 
-        - name: Build Application
-          working-directory: backend
-          run: npm run build
-          env:
-            NODE_ENV: staging
+      - name: Build Application
+        working-directory: backend
+        run: npm run build
+        env:
+          NODE_ENV: staging
 
-        - name: Generate Version ID
-          run: |
-            echo "VERSION=$(date +'%Y%m%d%H%M%S')-${GITHUB_SHA::8}" >> $GITHUB_ENV
+      - name: Generate Version ID
+        run: |
+          echo "VERSION=$(date +'%Y%m%d%H%M%S')-${GITHUB_SHA::8}" >> $GITHUB_ENV
 
-        - name: Install SSH client
-          run: sudo apt-get install openssh-client
+      - name: Install SSH client
+        run: sudo apt-get install openssh-client
 
-        - name: Create SSH Key
-          run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
+      - name: Create SSH Key
+        run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
 
-        - name: Update SSH Key Permission
-          run: chmod 400 ssh-key.pem
+      - name: Update SSH Key Permission
+        run: chmod 400 ssh-key.pem
 
-        - name: Set up Staging Environment Variables
-          run: |
-            echo "DB_USER=${{ secrets.DB_USER }}" >> .env
-            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
-            echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
-            echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
-            echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
-            echo "NODE_ENV=staging" >> .env
-            echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> .env
-            echo "CLIENT_SECRET=${{ secrets.CLIENT_SECRET }}" >> .env
-            echo "AZURE_ENDPOINT=${{ secrets.AZURE_ENDPOINT }}" >> .env
-            echo "AZURE_KEY=${{ secrets.AZURE_KEY }}" >> .env
-            echo "AZURE_INVOICE_MODEL=${{ secrets.AZURE_INVOICE_MODEL }}" >> .env
-            echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> .env
-            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
-            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
-            echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
-            echo "DSN=${{ secrets.DSN }}" >> .env
+      - name: Set up Staging Environment Variables
+        run: |
+          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+          echo "NODE_ENV=staging" >> .env
+          echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> .env
+          echo "CLIENT_SECRET=${{ secrets.CLIENT_SECRET }}" >> .env
+          echo "AZURE_ENDPOINT=${{ secrets.AZURE_ENDPOINT }}" >> .env
+          echo "AZURE_KEY=${{ secrets.AZURE_KEY }}" >> .env
+          echo "AZURE_INVOICE_MODEL=${{ secrets.AZURE_INVOICE_MODEL }}" >> .env
+          echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> .env
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+          echo "DSN=${{ secrets.DSN }}" >> .env
 
-        - name: Setup Release Directory Structure
-          run: |
-            ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
-              # Create releases and shared directories if they don't exist
-              mkdir -p ~/fin-invoice-ocr-team6/releases
-              mkdir -p ~/fin-invoice-ocr-team6/shared
-              mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
-            "
-
-        - name: Copy Environment File to Server
-          run: |
-            scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
-
-        - name: Deploy to Staging
-          run: |
-            ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
-              # Create new release directory
-              mkdir -p ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
-              
-              # Clone repo into the new release directory
-              cd ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
-              git clone --depth 1 -b ${{ github.ref_name }} https://github.com/${{ github.repository }} .
-              
-              # Install dependencies and build in release directory
-              cd backend
-              npm ci --staging
-              
-              # Create symbolic link to shared .env file
-              ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
-              
-              # Create symbolic link to shared uploads directory
-              ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
-              
-              # Run migrations
-              npx sequelize-cli db:migrate --env staging
-              
-              # Create release metadata file
-              echo "{
-                \"version\": \"${{ env.VERSION }}\",
-                \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",
-                \"branch\": \"${{ github.ref_name }}\",
-                \"commit\": \"${{ github.sha }}\",
-                \"actor\": \"${{ github.actor }}\"
-              }" > ../release.json
-              
-              # Update current symlink to point to the new release
-              ln -sfn ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }} ~/fin-invoice-ocr-team6/current
-              
-              # Start or restart PM2 application
-              cd ~/fin-invoice-ocr-team6/current/backend
-              pm2 delete invoice-ocr-backend || true
-              pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
-              pm2 save
-              pm2 list
-            '
-
-        - name: Verify Deployment
-          run: |
-            # Wait for the application to fully start
-            sleep 5
+      - name: Setup Release Directory Structure
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
+            # Create releases, backups, and shared directories if they don't exist
+            mkdir -p ~/fin-invoice-ocr-team6/releases
+            mkdir -p ~/fin-invoice-ocr-team6/backups
+            mkdir -p ~/fin-invoice-ocr-team6/shared
+            mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
+          "
+      
+      - name: Create Pre-Deployment Backup
+        run: |
+          # Copy rollback script from repository to server
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem backend/scripts/rollback.sh ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/rollback.sh
+          
+          # Set permissions and create backup
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            chmod +x ~/fin-invoice-ocr-team6/rollback.sh
+            echo "Rollback script updated"
             
-            # Check health endpoint
-            ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
-              HEALTH_CHECK=$(curl -s http://localhost:3000/health)
-              STATUS=$(echo $HEALTH_CHECK | grep -o "\"status\":\"ok\"" || echo "failed")
-              
-              if [ "$STATUS" = "\"status\":\"ok\"" ]; then
-                echo "✅ Health check passed!"
-                echo "Health data: $HEALTH_CHECK"
-              else
-                echo "❌ Health check failed!"
-                exit 1
-              fi
-            '
+            # Create backup directory if it doesn't exist
+            mkdir -p ~/fin-invoice-ocr-team6/backups
             
-            echo "✅ Deployment completed successfully!"
-            echo "Server: ${{ secrets.SERVER_IP }}"
-            echo "Branch: ${{ github.ref_name }}"
-            echo "Version: ${{ env.VERSION }}"
-            echo "Environment: staging"
+            # Check if current symlink exists and points to a valid directory
+            if [ -e ~/fin-invoice-ocr-team6/current ] && [ -d "$(readlink -f ~/fin-invoice-ocr-team6/current)" ]; then
+              echo "Creating backup of current deployment"
+              BACKUP_FILE=~/fin-invoice-ocr-team6/backups/backup-$(date +%Y%m%d%H%M%S).tar.gz
+              tar -czf $BACKUP_FILE -C ~/fin-invoice-ocr-team6/current .
+              echo "Backup created at $BACKUP_FILE"
+              
+              # Keep only last 5 backups
+              ls -t ~/fin-invoice-ocr-team6/backups/backup-*.tar.gz | tail -n +6 | xargs rm -f 2>/dev/null || true
+            else
+              echo "No current deployment found to backup"
+            fi
+          '
+
+      - name: Copy Environment File to Server
+        run: |
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
+
+      - name: Deploy to Staging
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Create new release directory
+            mkdir -p ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+            
+            # Clone repo into the new release directory
+            cd ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+            git clone --depth 1 -b ${{ github.ref_name }} https://github.com/${{ github.repository }} .
+            
+            # Install dependencies and build in release directory
+            cd backend
+            npm ci --staging
+            
+            # Create symbolic link to shared .env file
+            ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            
+            # Create symbolic link to shared uploads directory
+            ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
+            
+            # Run migrations
+            npx sequelize-cli db:migrate --env staging
+            
+            # Create release metadata file
+            echo "{
+              \"version\": \"${{ env.VERSION }}\",
+              \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",
+              \"branch\": \"${{ github.ref_name }}\",
+              \"commit\": \"${{ github.sha }}\",
+              \"actor\": \"${{ github.actor }}\"
+            }" > ../release.json
+            
+            # Update current symlink to point to the new release
+            ln -sfn ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }} ~/fin-invoice-ocr-team6/current
+            
+            # Show diagnostics
+            echo "Current symlink points to: $(readlink -f ~/fin-invoice-ocr-team6/current)"
+            echo "PM2 processes before restart:"
+            pm2 list
+            
+            # Stop existing process if running
+            pm2 stop invoice-ocr-backend || true
+            pm2 delete invoice-ocr-backend || true
+            
+            # Start with the new code (explicit path)
+            cd ~/fin-invoice-ocr-team6/current/backend
+            pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
+            pm2 save
+            
+            echo "PM2 processes after restart:"
+            pm2 list
+            
+            # Cleanup old releases (keep only the last 5)
+            cd ~/fin-invoice-ocr-team6/releases
+            ls -td */ | tail -n +6 | xargs rm -rf 2>/dev/null || true
+          '
+          
+      - name: Verify Deployment
+        run: |
+          # Wait for the application to fully start
+          sleep 5
+          
+          # Check health endpoint
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Checking if rollback script exists..."
+            if [ -f ~/fin-invoice-ocr-team6/rollback.sh ]; then
+              echo "Rollback script exists."
+              echo "Checking permissions:"
+              ls -la ~/fin-invoice-ocr-team6/rollback.sh
+            else
+              echo "ERROR: Rollback script does not exist!"
+            fi
+            
+            echo "Testing health endpoint..."
+            HEALTH_CHECK=$(curl -s http://localhost:3000/health)
+            echo "Health check response: $HEALTH_CHECK"
+            STATUS=$(echo $HEALTH_CHECK | grep -o "\"status\":\"ok\"" || echo "failed")
+            
+            if [ "$STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Health check passed!"
+            else
+              echo "❌ Health check failed! Initiating rollback..."
+              echo "Executing rollback script with verbose output:"
+              bash -x ~/fin-invoice-ocr-team6/rollback.sh || echo "Rollback script failed with exit code $?"
+            fi
+          '
 
   functional-test:
     name: Run Functional Tests
