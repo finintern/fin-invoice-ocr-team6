@@ -1,4 +1,4 @@
-class pdfDecryptionService {
+class PdfDecryptionService {
     constructor(decryptionStrategy) {
         this.decryptionStrategy = decryptionStrategy;
     }
@@ -8,4 +8,4 @@ class pdfDecryptionService {
     }
 }
 
-module.exports = pdfDecryptionService;
+module.exports = PdfDecryptionService;

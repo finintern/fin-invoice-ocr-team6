@@ -1,29 +1,66 @@
-const PDFDecryptionStrategy = require('./pdfDecryptionStrategy');
+const PdfDecryptionStrategy = require('./pdfDecryptionStrategy');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const { exec } = require('child_process');
+const { spawn } = require('child_process');
 
-class qpdfDecryption extends PDFDecryptionStrategy {
+class QpdfDecryption extends PdfDecryptionStrategy {
     constructor() {
         super();
-        this.isQpdfAvailable = false;
-        this.checkQpdfAvailability();
+        this._qpdfAvailabilityPromise = null;
     }
 
-    checkQpdfAvailability() {
-        exec('qpdf --version', (error) => {
-            this.isQpdfAvailable = !error;
-            if (!this.isQpdfAvailable) {
-                console.warn('QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.');
-            }
+    _checkQpdfInPath() {
+        return new Promise((resolve, reject) => {                     
+            const envPath = process.env.QPDF_PATH;
+            if (envPath && fs.existsSync(envPath)) {
+                return resolve(envPath);
+            }  
+            reject(new Error('QPDF not found in PATH.'));
         });
     }
 
-    async execCommand(command) {
-        // Check if qpdf is available before executing the command
-        if (!this.isQpdfAvailable) {
+    _checkQpdfVersion(qpdfPath) {
+        return new Promise((resolve, reject) => {
+            const process = spawn(qpdfPath, ['--version']);
+            
+            process.on('error', (error) => {
+                reject(error);
+            });
+            
+            process.on('close', (code) => {
+                if (code !== 0) {
+                    return reject(new Error('Failed to verify qpdf version'));
+                }
+                resolve();
+            });
+        });
+    }
+
+    async checkQpdfAvailability() {
+        if (this._qpdfAvailabilityPromise) {
+            return this._qpdfAvailabilityPromise;
+        }
+        
+        this._qpdfAvailabilityPromise = new Promise((resolve) => {
+            this._checkQpdfInPath()
+                .then(qpdfPath => this._checkQpdfVersion(qpdfPath))
+                .then(() => resolve(true))
+                // eslint-disable-next-line no-unused-vars
+                .catch(_error => {                    
+                    console.warn('QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.');
+                    resolve(false);
+                });
+        });
+        
+        return this._qpdfAvailabilityPromise;
+    }
+
+    async execCommand(command, args) {
+        const isAvailable = await this.checkQpdfAvailability();
+        
+        if (!isAvailable) {
             throw new Error(
                 'QPDF is not installed. Please install QPDF to decrypt PDF files.\n' +
                 'Windows: Install from https://qpdf.sourceforge.io/ or using Chocolatey: choco install qpdf\n' +
@@ -33,8 +70,15 @@ class qpdfDecryption extends PDFDecryptionStrategy {
         }
 
         return new Promise((resolve, reject) => {
-            exec(command, (error, stdout, stderr) => {
-                if (error) {
+            const process = spawn(command, args);
+    
+            let stderr = '';
+            process.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+    
+            process.on('close', (code) => {
+                if (code !== 0) {
                     reject(new Error(`Failed to decrypt PDF: ${stderr.trim()}`));
                 } else {
                     resolve();
@@ -43,10 +87,35 @@ class qpdfDecryption extends PDFDecryptionStrategy {
         });
     }
 
+    sanitizePassword(password) {
+        // Ensure the input is a string
+        if (typeof password !== 'string') {
+            throw new Error('Password must be a string');
+        }
+
+        // Prevent denial-of-service via excessive length
+        const MAX_PASSWORD_LENGTH = 1024;
+        if (password.length > MAX_PASSWORD_LENGTH) {
+            throw new Error(`Password exceeds maximum length of ${MAX_PASSWORD_LENGTH} characters`);
+        }
+
+        // Only allow printable ASCII characters (space to ~)
+        // This prevents shell control characters, escape sequences, etc.
+        const printableAsciiRegex = /^[\x20-\x7E]*$/;
+        if (!printableAsciiRegex.test(password)) {
+            throw new Error('Password contains invalid or unsafe characters');
+        }
+
+        return password;
+    }
+
+
     async decrypt(pdfBuffer, password) {
         if (!Buffer.isBuffer(pdfBuffer)) {
             throw new Error('Invalid input: Expected a Buffer.');
         }
+
+        const sanitizedPassword = this.sanitizePassword(password);
 
         let tempDir = null;
         let inputPath = null;
@@ -60,9 +129,12 @@ class qpdfDecryption extends PDFDecryptionStrategy {
             outputPath = path.join(tempDir, 'decrypted.pdf');
 
             fs.writeFileSync(inputPath, pdfBuffer);
-
-            const command = `qpdf --password=${password} --decrypt "${inputPath}" "${outputPath}"`;
-            await this.execCommand(command);
+            await this.execCommand('qpdf', [
+                `--password=${sanitizedPassword}`,
+                '--decrypt',
+                inputPath,
+                outputPath
+            ]);            
 
             if (!fs.existsSync(outputPath)) {
                 throw new Error('Failed to decrypt PDF: Output file not created.');
@@ -100,4 +172,4 @@ class qpdfDecryption extends PDFDecryptionStrategy {
     }
 }
 
-module.exports = qpdfDecryption;
+module.exports = QpdfDecryption;
