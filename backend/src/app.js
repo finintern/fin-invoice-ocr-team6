@@ -8,10 +8,6 @@ app.disable("x-powered-by");
 
 app.use(express.json());
 
-// Dummy endpoints
-app.get('/hello', (req, res) => {
-  res.send('hi');
-});
 
 app.use('/health', healthRoutes);
 app.use('/api/invoices', invoiceRoutes);
