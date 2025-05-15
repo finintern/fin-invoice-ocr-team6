@@ -122,56 +122,126 @@ jobs:
           echo "Code Coverage Report: https://codecov.io/gh/${REPO_NAME}/branch/${BRANCH_NAME}"
 
   deploy:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/staging'
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      name: Deploy to Staging
+      runs-on: ubuntu-latest
+      needs: test
+      if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment'
+      steps:
+        - name: Checkout Repository
+          uses: actions/checkout@v4
 
-      - name: Install SSH client
-        run: sudo apt-get install openssh-client
+        - name: Set up Node.js 20
+          uses: actions/setup-node@v3
+          with:
+            node-version: "20"
+            cache: "npm"
+            cache-dependency-path: backend/package-lock.json
 
-      - name: Create SSH Key
-        run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
+        - name: Install Dependencies
+          working-directory: backend
+          run: npm install
 
-      - name: Update SSH Key Permission
-        run: chmod 400 ssh-key.pem
+        - name: Build Application
+          working-directory: backend
+          run: npm run build
+          env:
+            NODE_ENV: staging
 
-      - name: Set up Staging Environment Variables
-        run: |
-          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
-          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
-          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
-          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
-          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
-          echo "NODE_ENV=staging" >> .env
-          echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> .env
-          echo "CLIENT_SECRET=${{ secrets.CLIENT_SECRET }}" >> .env
-          echo "AZURE_ENDPOINT=${{ secrets.AZURE_ENDPOINT }}" >> .env
-          echo "AZURE_KEY=${{ secrets.AZURE_KEY }}" >> .env
-          echo "AZURE_INVOICE_MODEL=${{ secrets.AZURE_INVOICE_MODEL }}" >> .env
-          echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> .env
-          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
-          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
-          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
-          echo "DSN=${{ secrets.DSN }}" >> .env
-          echo "cat .env"
-          cat .env
+        - name: Generate Version ID
+          run: |
+            echo "VERSION=$(date +'%Y%m%d%H%M%S')-${GITHUB_SHA::8}" >> $GITHUB_ENV
 
-      - name: Deploy to Staging
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
-            cd ~/fin-invoice-ocr-team6/backend &&
-            git fetch origin &&
-            git reset --hard origin/staging &&
-            npm ci &&
-            npx sequelize-cli db:migrate --env staging &&
-            pm2 restart invoice-ocr-backend || pm2 start server.js --name invoice-ocr-backend &&
-            pm2 save
-          "
+        - name: Install SSH client
+          run: sudo apt-get install openssh-client
 
+        - name: Create SSH Key
+          run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
+
+        - name: Update SSH Key Permission
+          run: chmod 400 ssh-key.pem
+
+        - name: Set up Staging Environment Variables
+          run: |
+            echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+            echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+            echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+            echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+            echo "NODE_ENV=staging" >> .env
+            echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> .env
+            echo "CLIENT_SECRET=${{ secrets.CLIENT_SECRET }}" >> .env
+            echo "AZURE_ENDPOINT=${{ secrets.AZURE_ENDPOINT }}" >> .env
+            echo "AZURE_KEY=${{ secrets.AZURE_KEY }}" >> .env
+            echo "AZURE_INVOICE_MODEL=${{ secrets.AZURE_INVOICE_MODEL }}" >> .env
+            echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> .env
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+            echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+            echo "DSN=${{ secrets.DSN }}" >> .env
+
+        - name: Setup Release Directory Structure
+          run: |
+            ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
+              # Create releases and shared directories if they don't exist
+              mkdir -p ~/fin-invoice-ocr-team6/releases
+              mkdir -p ~/fin-invoice-ocr-team6/shared
+              mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
+            "
+
+        - name: Copy Environment File to Server
+          run: |
+            scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
+
+        - name: Deploy to Staging
+          run: |
+            ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+              # Create new release directory
+              mkdir -p ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+              
+              # Clone repo into the new release directory
+              cd ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+              git clone --depth 1 -b ${{ github.ref_name }} https://github.com/${{ github.repository }} .
+              
+              # Install dependencies and build in release directory
+              cd backend
+              npm ci --staging
+              
+              # Create symbolic link to shared .env file
+              ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+              
+              # Create symbolic link to shared uploads directory
+              ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
+              
+              # Run migrations
+              npx sequelize-cli db:migrate --env staging
+              
+              # Create release metadata file
+              echo "{
+                \"version\": \"${{ env.VERSION }}\",
+                \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",
+                \"branch\": \"${{ github.ref_name }}\",
+                \"commit\": \"${{ github.sha }}\",
+                \"actor\": \"${{ github.actor }}\"
+              }" > ../release.json
+              
+              # Update current symlink to point to the new release
+              ln -sfn ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }} ~/fin-invoice-ocr-team6/current
+              
+              # Start or restart PM2 application
+              cd ~/fin-invoice-ocr-team6/current/backend
+              pm2 restart invoice-ocr-backend || pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
+              pm2 save
+              pm2 list
+            '
+
+        - name: Verify Deployment
+          run: |
+            echo "✅ Deployment completed successfully!"
+            echo "Server: ${{ secrets.SERVER_IP }}"
+            echo "Branch: ${{ github.ref_name }}"
+            echo "Version: ${{ env.VERSION }}"
+            echo "Environment: staging"
+            
   functional-test:
     name: Run Functional Tests
     runs-on: ubuntu-latest
