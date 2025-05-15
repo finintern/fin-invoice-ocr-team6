@@ -15,7 +15,7 @@ const { version } = require('../../package.json');
  */
 router.get('/', (req, res) => {
     const healthData = {
-        status: 'ok',
+        status: 'error',
         timestamp: new Date().toISOString(),
         uptime: Math.floor(process.uptime()),
         version: version,
