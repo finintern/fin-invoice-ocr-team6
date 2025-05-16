@@ -52,7 +52,7 @@ class PurchaseOrderRepository {
     
     async restore(id) {
         const purchaseOrder = await PurchaseOrder.findByPk(id, { paranoid: false });
-        if (purchaseOrder && purchaseOrder.deleted_at) {
+        if (purchaseOrder?.deleted_at) {
             await purchaseOrder.restore();
             return true;
         }
