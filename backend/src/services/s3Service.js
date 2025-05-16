@@ -28,12 +28,6 @@ class s3Service {
             },
             async (span) => {
                 try {
-                    Sentry.addBreadcrumb({
-                        category: "s3",
-                        message: "Starting file upload to S3",
-                        level: "info",
-                    });
-
                     const fileName = `${uuidv4()}.pdf`;
                     const params = {
                         Bucket: this.bucketName,
@@ -42,17 +36,6 @@ class s3Service {
                     };
 
                     const data = await this.s3.upload(params).promise();
-                    
-                    Sentry.addBreadcrumb({
-                        category: "s3",
-                        message: `File successfully uploaded to S3: ${fileName}`,
-                        level: "info",
-                        data: {
-                            fileLocation: data.Location
-                        }
-                    });
-                    
-                    Sentry.captureMessage(`S3 file upload completed successfully: ${fileName}`);
                     return data.Location;
                 } catch (error) {
                     Sentry.addBreadcrumb({
@@ -60,7 +43,6 @@ class s3Service {
                         message: `Error uploading file to S3: ${error.message}`,
                         level: "error",
                     });
-                    
                     Sentry.captureException(error);
                     console.error("S3 Upload Error:", error);
                     throw error;
@@ -89,44 +71,16 @@ class s3Service {
             },
             async (span) => {
                 try {
-                    // Create message based on whether documentId exists
-                    let uploadMessage = "Starting JSON upload to S3";
-                    if (documentId) {
-                        uploadMessage += " for document: " + documentId;
-                    }
-                    
-                    Sentry.addBreadcrumb({
-                        category: "s3",
-                        message: uploadMessage,
-                        level: "info",
-                    });
-
-                    // Create a unique filename with optional reference to original document
                     const prefix = documentId ? `${documentId}-analysis-` : 'analysis-';
                     const fileName = `${prefix}${uuidv4()}.json`;
-                    
-                    // Convert JSON object to string
                     const jsonString = JSON.stringify(jsonData, null, 2);
-                    
                     const params = {
                         Bucket: this.bucketName,
-                        Key: `analysis/${fileName}`, // Store in 'analysis' folder for organization
+                        Key: `analysis/${fileName}`,
                         Body: jsonString,
-                        ContentType: 'application/json' // Set proper content type
+                        ContentType: 'application/json'
                     };
-
                     const data = await this.s3.upload(params).promise();
-                    
-                    Sentry.addBreadcrumb({
-                        category: "s3",
-                        message: `JSON successfully uploaded to S3: ${fileName}`,
-                        level: "info",
-                        data: {
-                            fileLocation: data.Location
-                        }
-                    });
-                    
-                    Sentry.captureMessage(`S3 JSON upload completed successfully: ${fileName}`);
                     return data.Location;
                 } catch (error) {
                     Sentry.addBreadcrumb({
@@ -134,7 +88,6 @@ class s3Service {
                         message: `Error uploading JSON to S3: ${error.message}`,
                         level: "error",
                     });
-                    
                     Sentry.captureException(error);
                     console.error("S3 JSON Upload Error:", error);
                     throw error;
@@ -161,27 +114,11 @@ class s3Service {
             },
             async (span) => {
                 try {
-                    Sentry.addBreadcrumb({
-                        category: "s3",
-                        message: `Starting file deletion from S3: ${fileKey}`,
-                        level: "info",
-                    });
-
                     const params = {
                         Bucket: this.bucketName,
                         Key: fileKey
                     };
-
                     await this.s3.deleteObject(params).promise();
-                    
-                    Sentry.addBreadcrumb({
-                        category: "s3",
-                        message: `File successfully deleted from S3: ${fileKey}`,
-                        level: "info"
-                    });
-                    
-                    Sentry.captureMessage(`S3 file deletion completed successfully: ${fileKey}`);
-                    
                     return {
                         success: true,
                         message: `Successfully deleted file: ${fileKey} from bucket: ${this.bucketName}`
@@ -192,7 +129,6 @@ class s3Service {
                         message: `Error deleting file from S3: ${error.message}`,
                         level: "error",
                     });
-                    
                     Sentry.captureException(error);
                     console.error(`S3 Delete Error: ${error}`);
                     return {
