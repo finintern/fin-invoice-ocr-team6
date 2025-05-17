@@ -88,6 +88,17 @@ jobs:
             exit 1
           else
             echo "Local code coverage requirement (100%) met. Proceeding..."
+          fi      
+      - name: Check dependencies for vulnerabilities
+        working-directory: backend
+        run: |
+          echo "Checking for security vulnerabilities in dependencies..."
+          npm audit --audit-level=high --production
+          if [ $? -ne 0 ]; then
+            echo "::error::High or critical security vulnerabilities found in production dependencies."
+            exit 1
+          else
+            echo "No high or critical security vulnerabilities found in production dependencies."
           fi
 
       - name: Run build script
