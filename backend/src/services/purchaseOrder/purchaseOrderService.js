@@ -126,8 +126,6 @@ class PurchaseOrderService extends FinancialDocumentService {
     purchaseOrderData.original_filename = originalname;
     purchaseOrderData.file_size = fileSize;
 
-    console.log("Purchase order data mapped:", JSON.stringify(purchaseOrderData, null, 2));
-
     return { purchaseOrderData, customerData, vendorData, itemsData };
   }
 

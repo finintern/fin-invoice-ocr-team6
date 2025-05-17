@@ -114,18 +114,4 @@ describe('mapAnalysisResult method for Purchase Orders', () => {
     expect(Array.isArray(result.itemsData)).toBe(true);
     expect(result.itemsData[0].description).toBe('Test Item');
   });
-
-  test('should log mapped purchase order data', () => {
-    // Arrange
-    const analysisResult = { data: { someProperty: 'value' } };
-    
-    // Act
-    purchaseOrderService.mapAnalysisResult(analysisResult, partnerId, originalname, fileSize);
-    
-    // Assert
-    expect(console.log).toHaveBeenCalledWith(
-      "Purchase order data mapped:", 
-      expect.any(String) // The stringified JSON
-    );
-  });
 });

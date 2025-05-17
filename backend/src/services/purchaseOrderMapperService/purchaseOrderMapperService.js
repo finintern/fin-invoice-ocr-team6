@@ -76,11 +76,6 @@ class AzurePurchaseOrderMapper {
       currency_code: currency.currencyCode
     };
 
-    console.log('Mapped Purchase Order Data:', purchaseOrderData);
-    console.log('Mapped Customer Data:', customerData);
-    console.log('Mapped Vendor Data:', vendorData);
-    console.log('Mapped Items Data:', itemsData);
-
     return {
       purchaseOrderData,
       customerData,
