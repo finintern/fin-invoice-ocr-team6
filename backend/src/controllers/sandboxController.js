@@ -21,8 +21,8 @@ const mockUploadPurchaseOrder = async (req, res) => {
       return res.status(400).json({
         message: "No file uploaded"
       });
-    }
-      const { buffer, originalname, mimetype } = req.file;
+    }      
+    const { buffer, originalname } = req.file;
     
     // Static mock purchase order ID for sandbox testing
     const purchaseOrderId = "sandbox-po-789012";
@@ -30,11 +30,6 @@ const mockUploadPurchaseOrder = async (req, res) => {
     // Static partner ID for sandbox testing
     const partnerId = "sandbox-partner-123456";
     
-    // Generate mock S3 URL for the uploaded file
-    const _mockS3Url = `https://mock-s3-bucket.s3.amazonaws.com/${purchaseOrderId}.pdf`;
-    
-    // Generate mock S3 URL for the analysis JSON
-    const _mockAnalysisUrl = `https://mock-s3-bucket.s3.amazonaws.com/analysis/${purchaseOrderId}-analysis.json`;
 
     // Use the real purchase order mapper to map the sample data
     const purchaseOrderMapper = new AzurePurchaseOrderMapper();
