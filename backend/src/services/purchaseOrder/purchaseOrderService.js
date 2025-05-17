@@ -225,12 +225,6 @@ class PurchaseOrderService extends FinancialDocumentService {
 
       const purchaseOrder = await this.purchaseOrderRepository.findById(id);
 
-      if (!purchaseOrder) {
-        // Log not found
-        PurchaseOrderLogger.logGetByIdNotFound(id);
-        throw new NotFoundError("Purchase order not found");
-      }
-
       // Return early with appropriate message for PROCESSING and FAILED states
       if (purchaseOrder.status === DocumentStatus.PROCESSING) {
         return {
