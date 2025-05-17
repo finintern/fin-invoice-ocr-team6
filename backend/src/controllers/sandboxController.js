@@ -24,12 +24,8 @@ const mockUploadPurchaseOrder = async (req, res) => {
     }      
     const { buffer, originalname } = req.file;
     
-    // Static mock purchase order ID for sandbox testing
-    const purchaseOrderId = "sandbox-po-789012";
-    
     // Static partner ID for sandbox testing
     const partnerId = "sandbox-partner-123456";
-    
 
     // Use the real purchase order mapper to map the sample data
     const purchaseOrderMapper = new AzurePurchaseOrderMapper();
