@@ -14,6 +14,10 @@ jest.mock('../../../src/utils/logger/PurchaseOrderLogger', () => {
     logAnalysisComplete: jest.fn(),
     logProcessingComplete: jest.fn(),
     logError: jest.fn(),
+    logGetByIdRequest: jest.fn(),
+    logGetByIdSuccess: jest.fn(),
+    logGetByIdNotFound: jest.fn(),
+    logGetByIdError: jest.fn(),
   };
 
   return {
@@ -123,6 +127,45 @@ describe('PurchaseOrderLoggerAdapter', () => {
       
       expect(loggerInstance.logError).toHaveBeenCalledWith(purchaseOrderId, error, stage);
       expect(loggerInstance.logError).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Static adapter methods for get by ID operations', () => {
+    it('should call logGetByIdRequest with correct parameter', () => {
+      const purchaseOrderId = 'po-123';
+      
+      PurchaseOrderLoggerAdapter.logGetByIdRequest(purchaseOrderId);
+      
+      expect(loggerInstance.logGetByIdRequest).toHaveBeenCalledWith(purchaseOrderId);
+      expect(loggerInstance.logGetByIdRequest).toHaveBeenCalledTimes(1);
+    });
+    
+    it('should call logGetByIdSuccess with correct parameter', () => {
+      const purchaseOrderId = 'po-123';
+      
+      PurchaseOrderLoggerAdapter.logGetByIdSuccess(purchaseOrderId);
+      
+      expect(loggerInstance.logGetByIdSuccess).toHaveBeenCalledWith(purchaseOrderId);
+      expect(loggerInstance.logGetByIdSuccess).toHaveBeenCalledTimes(1);
+    });
+    
+    it('should call logGetByIdNotFound with correct parameter', () => {
+      const purchaseOrderId = 'po-123';
+      
+      PurchaseOrderLoggerAdapter.logGetByIdNotFound(purchaseOrderId);
+      
+      expect(loggerInstance.logGetByIdNotFound).toHaveBeenCalledWith(purchaseOrderId);
+      expect(loggerInstance.logGetByIdNotFound).toHaveBeenCalledTimes(1);
+    });
+    
+    it('should call logGetByIdError with correct parameters', () => {
+      const purchaseOrderId = 'po-123';
+      const error = new Error('Database error');
+      
+      PurchaseOrderLoggerAdapter.logGetByIdError(purchaseOrderId, error);
+      
+      expect(loggerInstance.logGetByIdError).toHaveBeenCalledWith(purchaseOrderId, error);
+      expect(loggerInstance.logGetByIdError).toHaveBeenCalledTimes(1);
     });
   });
 });
