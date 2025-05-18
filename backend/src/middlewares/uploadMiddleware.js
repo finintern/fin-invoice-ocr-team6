@@ -1,5 +1,27 @@
 const multer = require('multer');
-// Basic multer setup
+
+/**
+ * File Upload Middleware
+ * 
+ * @description Handles file uploads using Multer with memory storage
+ * @module middlewares/uploadMiddleware
+ * 
+ * Configuration:
+ * - Uses memory storage for temporary file handling
+ * - Maximum file size: 20MB
+ * - Expects a single file with the field name 'file'
+ * 
+ * Error handling:
+ * - Returns 413 status for files exceeding size limit
+ * - Returns 400 status for other Multer-related errors
+ * - Passes other errors to the next error handler
+ * 
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * 
+ * @returns {Function} Multer middleware configured for file uploads
+ */
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
