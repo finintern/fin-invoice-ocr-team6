@@ -147,10 +147,10 @@ describe("Sandbox Invoice Controller", () => {
 
       // Assert: Check the response
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      expect(res.json).toHaveBeenCalledWith({
         id: "test-invoice-id",
         status: "Analyzed"
-      }));
+      });
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining("[SANDBOX] Mock get invoice status for ID"));
     });
     
