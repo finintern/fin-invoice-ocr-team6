@@ -98,17 +98,18 @@ class InvoiceController extends FinancialDocumentController {
 
   getInvoiceById(req, res) {
     const { id } = req.params;
-  
+    
     from(this.validateGetRequest(req, id)).pipe(
       switchMap(() => from(this.service.getInvoiceById(id))),
       map((invoiceDetail) => {
-        console.log("Invoice detail:", invoiceDetail);
         if (!invoiceDetail) {
+          InvoiceLogger.logRetrievalError(id, new Error("Invoice not found"), 'NOT_FOUND');
           return res.status(404).json({ message: "Invoice not found" });
         }
         return res.status(200).json(invoiceDetail);
       }),
       catchError((error) => {
+        InvoiceLogger.logRetrievalError(id, error, 'CONTROLLER_ERROR');
         this.handleError(res, error);
         return EMPTY; 
       })
@@ -137,16 +138,22 @@ class InvoiceController extends FinancialDocumentController {
    * @returns {Promise<Object>} JSON with invoice ID and status
    */
   async getInvoiceStatus(req, res) {
+    const { id } = req.params;
     try {
-      const { id } = req.params;
+      InvoiceLogger.logProcessingStart(id); 
+
       await this.validateGetRequest(req, id);
 
       const statusResult = await this.service.getInvoiceStatus(id);
+
+      InvoiceLogger.logProcessingComplete(id); 
       return res.status(200).json(statusResult);
     } catch (error) {
+      InvoiceLogger.logError(id, error, 'GET_INVOICE_STATUS_CONTROLLER'); 
       return this.handleError(res, error);
     }
   }
+
 
   deleteInvoiceById(req, res) {
     const { id } = req.params;

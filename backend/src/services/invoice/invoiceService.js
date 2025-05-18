@@ -255,17 +255,23 @@ class InvoiceService extends FinancialDocumentService {
   }
 
   getInvoiceById(invoiceId) {
+    InvoiceLogger.logRetrievalStart(invoiceId);
+    
     return from(this.invoiceRepository.findById(invoiceId)).pipe(
       switchMap(invoice => {
         if (!invoice) {
-          return throwError(() => new NotFoundError("Invoice not found"));
+          const error = new NotFoundError("Invoice not found");
+          InvoiceLogger.logRetrievalError(invoiceId, error, 'NOT_FOUND');
+          return throwError(() => error);
         }
 
         if (invoice.status === DocumentStatus.PROCESSING) {
+          InvoiceLogger.logRetrievalProcessing(invoiceId);
           return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.PROCESSING));
         }
 
         if (invoice.status === DocumentStatus.FAILED) {
+          InvoiceLogger.logRetrievalFailed(invoiceId);
           return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.FAILED));
         }
 
@@ -278,13 +284,21 @@ class InvoiceService extends FinancialDocumentService {
           : of(null);
 
         return forkJoin({ items: items$, customer: customer$, vendor: vendor$ }).pipe(
-          map(({ items, customer, vendor }) =>
-            this.responseFormatter.formatInvoiceResponse(invoice, items, customer, vendor)
-          )
+          map(({ items, customer, vendor }) => {
+            const summary = {
+              hasItems: items && items.length > 0,
+              hasCustomer: !!customer,
+              hasVendor: !!vendor,
+              status: invoice.status
+            };
+            
+            InvoiceLogger.logRetrievalSuccess(invoiceId, summary);
+            return this.responseFormatter.formatInvoiceResponse(invoice, items, customer, vendor);
+          })
         );
       }),
       catchError(error => {
-        console.error("Error retrieving invoice:", error);
+        InvoiceLogger.logRetrievalError(invoiceId, error, 'DATABASE_ERROR');
         return throwError(() =>
           error.message === "Invoice not found"
             ? error
