@@ -235,14 +235,6 @@ router.post('/invoices/upload', uploadMiddleware, sandboxInvoiceController.mockU
  *                   type: string
  *                   enum: ['Processing', 'Analyzed', 'Failed']
  *                   example: 'Analyzed'
- *                 created_at:
- *                   type: string
- *                   format: date-time
- *                   example: '2023-01-15T08:30:00.000Z'
- *                 updated_at:
- *                   type: string
- *                   format: date-time
- *                   example: '2023-01-15T08:30:00.000Z'
  *       500:
  *         description: Server error
  *         content:
