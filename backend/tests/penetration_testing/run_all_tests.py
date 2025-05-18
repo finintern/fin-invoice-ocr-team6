@@ -14,7 +14,7 @@ Usage:
 import argparse
 import time
 from colorama import Fore, Style, init
-from backend.tests.penetration_testing.auth_pentest import AuthenticationPenTester
+from auth_pentest import AuthenticationPenTester
 from invoice_pentest import InvoicePenTester
 from purchase_order_pentest import PurchaseOrderPenTester
 
