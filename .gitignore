@@ -8,3 +8,10 @@ Caddyfile
 __pycache__/
 *.py[cod]
 *$py.class
+# Profiling results
+.clinic
+profiling-results/
+backend/profiling-results/
+*clinic-flame*
+vscode-profile-*.cpuprofile
+vscode-profile-*.heapprofile

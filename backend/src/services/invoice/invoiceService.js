@@ -7,7 +7,7 @@ const InvoiceRepository = require('../../repositories/invoiceRepository.js');
 const CustomerRepository = require('../../repositories/customerRepository.js');
 const VendorRepository = require('../../repositories/vendorRepository.js');
 const ItemRepository = require('../../repositories/itemRepository.js');
-const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer.js');
+const { OcrAnalyzerFactory } = require('../analysis');
 const InvoiceValidator = require('./invoiceValidator.js');
 const InvoiceResponseFormatter = require('./invoiceResponseFormatter.js');
 const { AzureInvoiceMapper } = require('../invoiceMapperService/invoiceMapperService.js');
@@ -15,6 +15,9 @@ const DocumentStatus = require('../../models/enums/DocumentStatus.js');
 const { NotFoundError } = require('../../utils/errors.js');
 const fs = require('fs').promises;
 const path = require('path');
+const InvoiceLogger = require('./invoiceLogger.js'); 
+
+
 
 class InvoiceService extends FinancialDocumentService {
   constructor(dependencies = {}) {
@@ -28,7 +31,10 @@ class InvoiceService extends FinancialDocumentService {
     this.itemRepository = dependencies.itemRepository || new ItemRepository();
 
     // Inisialisasi services
-    this.documentAnalyzer = dependencies.documentAnalyzer || new AzureDocumentAnalyzer();
+    this.ocrType = dependencies.ocrType || process.env.OCR_ANALYZER_TYPE || 'azure';
+    this.ocrConfig = dependencies.ocrConfig || {};
+    this.documentAnalyzer = dependencies.documentAnalyzer || 
+                            OcrAnalyzerFactory.createAnalyzer(this.ocrType, this.ocrConfig);
     this.validator = dependencies.validator || new InvoiceValidator();
     this.responseFormatter = dependencies.responseFormatter || new InvoiceResponseFormatter();
     this.azureMapper = dependencies.azureMapper || new AzureInvoiceMapper();
@@ -249,17 +255,23 @@ class InvoiceService extends FinancialDocumentService {
   }
 
   getInvoiceById(invoiceId) {
+    InvoiceLogger.logRetrievalStart(invoiceId);
+    
     return from(this.invoiceRepository.findById(invoiceId)).pipe(
       switchMap(invoice => {
         if (!invoice) {
-          return throwError(() => new NotFoundError("Invoice not found"));
+          const error = new NotFoundError("Invoice not found");
+          InvoiceLogger.logRetrievalError(invoiceId, error, 'NOT_FOUND');
+          return throwError(() => error);
         }
 
         if (invoice.status === DocumentStatus.PROCESSING) {
+          InvoiceLogger.logRetrievalProcessing(invoiceId);
           return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.PROCESSING));
         }
 
         if (invoice.status === DocumentStatus.FAILED) {
+          InvoiceLogger.logRetrievalFailed(invoiceId);
           return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.FAILED));
         }
 
@@ -272,13 +284,21 @@ class InvoiceService extends FinancialDocumentService {
           : of(null);
 
         return forkJoin({ items: items$, customer: customer$, vendor: vendor$ }).pipe(
-          map(({ items, customer, vendor }) =>
-            this.responseFormatter.formatInvoiceResponse(invoice, items, customer, vendor)
-          )
+          map(({ items, customer, vendor }) => {
+            const summary = {
+              hasItems: items && items.length > 0,
+              hasCustomer: !!customer,
+              hasVendor: !!vendor,
+              status: invoice.status
+            };
+            
+            InvoiceLogger.logRetrievalSuccess(invoiceId, summary);
+            return this.responseFormatter.formatInvoiceResponse(invoice, items, customer, vendor);
+          })
         );
       }),
       catchError(error => {
-        console.error("Error retrieving invoice:", error);
+        InvoiceLogger.logRetrievalError(invoiceId, error, 'DATABASE_ERROR');
         return throwError(() =>
           error.message === "Invoice not found"
             ? error
@@ -295,14 +315,17 @@ class InvoiceService extends FinancialDocumentService {
         map(result => {
           if (result === 0) {
             const err = new Error(`Failed to delete invoice with ID: ${id}`);
+            InvoiceLogger.logDeletionError(id, err, 'DELETE_DB');
             Sentry.captureException(err);
             throw err;
           }
-          return { message: "Invoice successfully deleted" };
+          InvoiceLogger.logDatabaseDeletionSuccess(id);
+          return { message: 'Invoice successfully deleted' };
         }),
         catchError(error => {
+          InvoiceLogger.logDeletionError(id, error, 'DELETE_DB');
           Sentry.captureException(error);
-          throw new Error("Failed to delete invoice: " + error.message);
+          throw new Error('Failed to delete invoice: ' + error.message);
         })
       );
   }
@@ -354,20 +377,26 @@ function createInvoiceService(customDependencies = {}) {
   const CustomerRepository = require('../../repositories/customerRepository.js');
   const VendorRepository = require('../../repositories/vendorRepository.js');
   const ItemRepository = require('../../repositories/itemRepository.js');
-  const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer');
+  const { OcrAnalyzerFactory } = require('../analysis');
   const InvoiceValidator = require('./invoiceValidator');
   const InvoiceResponseFormatter = require('./invoiceResponseFormatter');
   const { AzureInvoiceMapper } = require('../invoiceMapperService/invoiceMapperService');
   const InvoiceLogger = require('./invoiceLogger');
   const s3Service = require('../s3Service');
 
+  // Get OCR type from environment or use default
+  const ocrType = process.env.OCR_ANALYZER_TYPE || 'azure';
+  const ocrConfig = {};
+  
   // Gabungkan default dependencies dengan custom dependencies
   const dependencies = {
     invoiceRepository: new InvoiceRepository(),
     customerRepository: new CustomerRepository(),
     vendorRepository: new VendorRepository(),
     itemRepository: new ItemRepository(),
-    documentAnalyzer: new AzureDocumentAnalyzer(),
+    documentAnalyzer: OcrAnalyzerFactory.createAnalyzer(ocrType, ocrConfig),
+    ocrType,
+    ocrConfig,
     validator: new InvoiceValidator(),
     responseFormatter: new InvoiceResponseFormatter(),
     azureMapper: new AzureInvoiceMapper(),
