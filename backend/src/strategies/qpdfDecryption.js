@@ -47,7 +47,7 @@ class QpdfDecryption extends PdfDecryptionStrategy {
     }
 
     async checkQpdfAvailability() {
-        if (await this._qpdfAvailabilityPromise) {
+        if (this._qpdfAvailabilityPromise) {
             return this._qpdfAvailabilityPromise;
         }
         
@@ -104,12 +104,37 @@ class QpdfDecryption extends PdfDecryptionStrategy {
         });
     }
 
+    sanitizePassword(password) {
+        // Ensure the input is a string
+        if (typeof password !== 'string') {
+            throw new Error('Password must be a string');
+        }
+
+        // Prevent denial-of-service via excessive length
+        const MAX_PASSWORD_LENGTH = 1024;
+        if (password.length > MAX_PASSWORD_LENGTH) {
+            throw new Error(`Password exceeds maximum length of ${MAX_PASSWORD_LENGTH} characters`);
+        }
+
+        // Only allow printable ASCII characters (space to ~)
+        // This prevents shell control characters, escape sequences, etc.
+        const printableAsciiRegex = /^[\x20-\x7E]*$/;
+        if (!printableAsciiRegex.test(password)) {
+            throw new Error('Password contains invalid or unsafe characters');
+        }
+
+        return password;
+    }
+
+
     async decrypt(pdfBuffer, password) {
         if (!Buffer.isBuffer(pdfBuffer)) {
             const error = new Error('Invalid input: Expected a Buffer.');
             DecryptLogger.logDecryptionError(0, error, 'QPDF');
             throw error;
         }
+        const sanitizedPassword = this.sanitizePassword(password);
+
         
         const startTime = Date.now();
         const fileSize = pdfBuffer.length;
@@ -126,6 +151,7 @@ class QpdfDecryption extends PdfDecryptionStrategy {
 
             fs.writeFileSync(inputPath, pdfBuffer);
 
+
             DecryptLogger.logDecryptionStart(fileSize, 'QPDF decrypt');
             Sentry.addBreadcrumb({
                 category: 'pdf-decryption',
@@ -134,7 +160,7 @@ class QpdfDecryption extends PdfDecryptionStrategy {
             });
 
             await this.execCommand('qpdf', [
-                `--password=${password}`,
+                `--password=${sanitizedPassword}`,
                 '--decrypt',
                 inputPath,
                 outputPath
