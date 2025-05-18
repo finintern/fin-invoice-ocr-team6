@@ -202,4 +202,103 @@ describe('InvoiceLogger', () => {
       })
     );
   });
+
+  it('should log deletion start', () => {
+    const invoiceId = 'inv12345';
+    const partnerId = 'partner123';
+    
+    instance.logDeletionStart(invoiceId, partnerId);
+    
+    expect(instance.info).toHaveBeenCalledWith(
+      'Partner initiated invoice deletion',
+      expect.objectContaining({
+        invoiceId,
+        partnerId,
+        event: 'DELETION_START'
+      })
+    );
+  });
+  
+  it('should log S3 deletion success', () => {
+    const invoiceId = 'inv12345';
+    const fileKey = 'invoices/inv12345.pdf';
+    
+    instance.logS3DeletionSuccess(invoiceId, fileKey);
+    
+    expect(instance.info).toHaveBeenCalledWith(
+      'Invoice file deleted from S3',
+      expect.objectContaining({
+        invoiceId,
+        fileKey,
+        event: 'DELETE_S3_SUCCESS'
+      })
+    );
+  });
+  
+  it('should log database deletion success', () => {
+    const invoiceId = 'inv12345';
+    
+    instance.logDatabaseDeletionSuccess(invoiceId);
+    
+    expect(instance.info).toHaveBeenCalledWith(
+      'Invoice deleted from database',
+      expect.objectContaining({
+        invoiceId,
+        event: 'DELETE_DB_SUCCESS'
+      })
+    );
+  });
+  
+  it('should log deletion success', () => {
+    const invoiceId = 'inv12345';
+    const partnerId = 'partner123';
+    
+    instance.logDeletionSuccess(invoiceId, partnerId);
+    
+    expect(instance.info).toHaveBeenCalledWith(
+      'Invoice deletion completed successfully',
+      expect.objectContaining({
+        invoiceId,
+        partnerId,
+        event: 'DELETE_SUCCESS'
+      })
+    );
+  });
+  
+  it('should log deletion error with complete error object', () => {
+    const invoiceId = 'inv12345';
+    const error = new Error('S3 deletion failed');
+    const stage = 's3-deletion';
+    
+    instance.logDeletionError(invoiceId, error, stage);
+    
+    expect(instance.error).toHaveBeenCalledWith(
+      'Error occurred during invoice deletion',
+      expect.objectContaining({
+        invoiceId,
+        error: error.message,
+        stack: error.stack,
+        stage,
+        event: 'DELETE_ERROR'
+      })
+    );
+  });
+  
+  it('should log deletion error with null error object', () => {
+    const invoiceId = 'inv12345';
+    const stage = 's3-deletion';
+    
+    instance.logDeletionError(invoiceId, null, stage);
+    
+    expect(instance.error).toHaveBeenCalledWith(
+      'Error occurred during invoice deletion',
+      expect.objectContaining({
+        invoiceId,
+        error: 'Unknown error',
+        stack: '',
+        stage,
+        event: 'DELETE_ERROR'
+      })
+    );
+  });
 });
