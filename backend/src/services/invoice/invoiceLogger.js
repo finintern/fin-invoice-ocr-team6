@@ -37,6 +37,47 @@ class InvoiceLoggerAdapter {
   static logValidationError(invoiceId, error) {
     return InvoiceLogger.getInstance().logValidationError(invoiceId, error);
   }
+
+  static logDeletionStart(invoiceId, partnerId) {
+    return InvoiceLogger.getInstance().logDeletionStart(invoiceId, partnerId);
+  }
+  
+  static logS3DeletionSuccess(invoiceId, fileKey) {
+    return InvoiceLogger.getInstance().logS3DeletionSuccess(invoiceId, fileKey);
+  }
+  
+  static logDatabaseDeletionSuccess(invoiceId) {
+    return InvoiceLogger.getInstance().logDatabaseDeletionSuccess(invoiceId);
+  }
+  
+  static logDeletionSuccess(invoiceId, partnerId) {
+    return InvoiceLogger.getInstance().logDeletionSuccess(invoiceId, partnerId);
+  }
+  
+  static logDeletionError(invoiceId, error, stage) {
+    return InvoiceLogger.getInstance().logDeletionError(invoiceId, error, stage);
+  }
+
+   static logRetrievalStart(invoiceId) {
+    return InvoiceLogger.getInstance().logRetrievalStart(invoiceId);
+  }
+
+  static logRetrievalSuccess(invoiceId, summary) {
+    return InvoiceLogger.getInstance().logRetrievalSuccess(invoiceId, summary);
+  }
+
+  static logRetrievalProcessing(invoiceId) {
+    return InvoiceLogger.getInstance().logRetrievalProcessing(invoiceId);
+  }
+
+  static logRetrievalFailed(invoiceId) {
+    return InvoiceLogger.getInstance().logRetrievalFailed(invoiceId);
+  }
+
+  static logRetrievalError(invoiceId, error, stage) {
+    return InvoiceLogger.getInstance().logRetrievalError(invoiceId, error, stage);
+  }
+  
 }
 
 module.exports = InvoiceLoggerAdapter;

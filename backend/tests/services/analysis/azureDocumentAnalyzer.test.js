@@ -46,6 +46,10 @@ describe('Azure Document Analyzer', () => {
     DocumentAnalysisClient.mockImplementation(() => mockClient);
   });
 
+  test("should return 'azure' as analyzer type", () => {
+    expect(analyzer.getType()).toBe('azure');
+  });
+
   describe("Positive Cases", () => {
     test("should successfully analyze a document from URL", async () => {
       // Arrange

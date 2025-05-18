@@ -353,6 +353,7 @@ Jika ingin menambah pengujian keamanan baru:
 </details>
 
 <details>
+
   <summary><strong>Tutorial Profiling dengan JavaScript Debug Terminal</strong></summary>
 
 ## Tutorial: Profiling Aplikasi dengan JavaScript Debug Terminal
@@ -422,3 +423,120 @@ Tutorial ini menjelaskan langkah-langkah cara melakukan profiling pada aplikasi 
 - **Profiling Endpoint API**: Tambahkan breakpoint di handler route untuk menganalisis performa endpoint
 
 </details>
+
+<summary><strong>Tutorial Menambahkan Model OCR</strong></summary>
+
+## Gambaran Umum
+
+Sistem ini menggunakan arsitektur analyzer OCR yang fleksibel yang mendukung beberapa mesin OCR melalui factory pattern. Hal ini memungkinkan kita untuk:
+
+- Menggunakan mesin OCR yang berbeda untuk jenis dokumen yang berbeda
+- Beralih antar penyedia OCR tanpa mengubah kode
+- Dengan mudah menambahkan teknologi OCR baru saat tersedia
+
+Arsitektur intinya terdiri dari:
+- `OcrAnalyzer`: Kelas dasar abstrak yang mendefinisikan interface
+- `OcrAnalyzerFactory`: Factory untuk membuat instance analyzer
+- Implementasi concrete analyzer (Azure, Dummy, dll.)
+
+### Step 1: Membuat Kelas Analyzer Baru
+
+Buat file baru di `backend/src/services/analysis/` untuk analyzer. Misalnya, `googleVisionAnalyzer.js`:
+
+```javascript
+const OcrAnalyzer = require('./OcrAnalyzer');
+const Sentry = require("../../instrument");
+
+class GoogleVisionAnalyzer extends OcrAnalyzer {
+  constructor(config = {}) {
+    super();
+    this.apiKey = config.apiKey || process.env.GOOGLE_VISION_API_KEY;
+    // Tambahkan properti konfigurasi lain sesuai kebutuhan
+  }
+
+  getType() {
+    return 'google-vision';
+  }
+
+  async analyzeDocument(documentSource) {
+    if (!documentSource) {
+      throw new Error("documentSource is required");
+    }
+
+    return Sentry.startSpan(
+      {
+        name: "analyzeDocumentWithGoogleVision",
+        attributes: {
+          documentSource: typeof documentSource === "string" ? "url" : "buffer",
+          analyzerType: "google-vision"
+        },
+      },
+      async (span) => {
+        try {
+          // Implementasikan integrasi Google Vision API di sini
+          
+          // Proses dan transformasikan hasil agar sesuai dengan format yang diharapkan
+          
+          return {
+            message: "Dokumen diproses dengan Google Vision",
+            data: processedResult
+          };
+        } catch (error) {
+          Sentry.captureException(error);
+          throw new Error(`Google Vision analyzer gagal: ${error.message}`);
+        } finally {
+          span.end();
+        }
+      }
+    );
+  }
+}
+
+module.exports = GoogleVisionAnalyzer;
+```
+
+### Langkah 2: Register Analyzer Baru
+
+Import dan register analyzer baru di `backend/src/services/analysis/index.js`:
+
+```javascript
+const OcrAnalyzer = require('./OcrAnalyzer');
+const OcrAnalyzerFactory = require('./OcrAnalyzerFactory');
+const AzureDocumentAnalyzer = require('./azureDocumentAnalyzer');
+const DummyOcrAnalyzer = require('./DummyOcrAnalyzer');
+const GoogleVisionAnalyzer = require('./googleVisionAnalyzer');
+
+OcrAnalyzerFactory.registerAnalyzerType('dummy', DummyOcrAnalyzer);
+OcrAnalyzerFactory.registerAnalyzerType('google-vision', GoogleVisionAnalyzer); // Tambahkan ini
+
+// Ekspor semua komponen
+module.exports = {
+  OcrAnalyzer,
+  OcrAnalyzerFactory,
+  AzureDocumentAnalyzer,
+  DummyOcrAnalyzer,
+  GoogleVisionAnalyzer // Tambahkan ini
+};
+```
+
+### Langkah 3: Menggunakan Analyzer Baru
+
+Gunakan analyzer baru Anda seperti yang sudah ada:
+
+```javascript
+const { OcrAnalyzerFactory } = require('./services/analysis');
+
+// Membuat Google Vision analyzer
+const analyzer = OcrAnalyzerFactory.createAnalyzer('google-vision', {
+  apiKey: 'your-google-api-key'
+});
+
+// Menganalisis dokumen
+const result = await analyzer.analyzeDocument(documentSource);
+```
+
+Untuk mengaktifkan analyzer baru, pastikan untuk mengonfigurasi value `OCR_ANALYZER_TYPE` di file `.env`:
+
+```env
+OCR_ANALYZER_TYPE=google-vision
+```
