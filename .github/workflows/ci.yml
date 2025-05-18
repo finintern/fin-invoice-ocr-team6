@@ -1,4 +1,4 @@
-name: Node.js CI/CD Pipeline
+name: Node.js CI/CD Pipeline with Blue-Green Deployment
 
 on:
   push:
@@ -121,8 +121,8 @@ jobs:
           REPO_NAME="${{ github.repository }}"
           echo "Code Coverage Report: https://codecov.io/gh/${REPO_NAME}/branch/${BRANCH_NAME}"
 
-  deploy:
-    name: Deploy to Staging
+  deploy-green:
+    name: Deploy to Green Environment
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment'
@@ -185,45 +185,20 @@ jobs:
           echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
           echo "DSN=${{ secrets.DSN }}" >> .env
 
-      - name: Setup Release Directory Structure
+      - name: Setup Directory Structure
         run: |
           ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
-            # Create releases, backups, and shared directories if they don't exist
+            # Create necessary directories if they don't exist
             mkdir -p ~/fin-invoice-ocr-team6/releases
             mkdir -p ~/fin-invoice-ocr-team6/backups
             mkdir -p ~/fin-invoice-ocr-team6/shared
             mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
             mkdir -p ~/fin-invoice-ocr-team6/db_backups
+            mkdir -p ~/fin-invoice-ocr-team6/environments/green/current/backend
+            mkdir -p ~/fin-invoice-ocr-team6/environments/blue/current/backend
           "
       
-      - name: Create Pre-Deployment Backup
-        run: |
-          # Copy rollback script from repository to server
-          scp -o StrictHostKeyChecking=no -i ssh-key.pem backend/scripts/rollback.sh ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/rollback.sh
-          
-          # Set permissions and create backup
-          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
-            chmod +x ~/fin-invoice-ocr-team6/rollback.sh
-            echo "Rollback script updated"
-            
-            # Create backup directory if it does not exist
-            mkdir -p ~/fin-invoice-ocr-team6/backups
-            
-            # Check if current symlink exists and points to a valid directory
-            if [ -e ~/fin-invoice-ocr-team6/current ] && [ -d "$(readlink -f ~/fin-invoice-ocr-team6/current)" ]; then
-              echo "Creating backup of current deployment"
-              BACKUP_FILE=~/fin-invoice-ocr-team6/backups/backup-$(date +%Y%m%d%H%M%S).tar.gz
-              tar -czf $BACKUP_FILE -C ~/fin-invoice-ocr-team6/current .
-              echo "Backup created at $BACKUP_FILE"
-              
-              # Keep only last 5 backups
-              ls -t ~/fin-invoice-ocr-team6/backups/backup-*.tar.gz | tail -n +6 | xargs rm -f 2>/dev/null || true
-            else
-              echo "No current deployment found to backup"
-            fi
-          '
-
-      - name: Create MySQL Database Backup
+      - name: Create Database Backup
         run: |
           ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
             # Load environment variables
@@ -233,9 +208,6 @@ jobs:
             mkdir -p ~/fin-invoice-ocr-team6/db_backups
             
             echo "Creating MySQL database backup..."
-            
-            # Install mysqldump if needed
-            which mysqldump >/dev/null || sudo apt-get -y install mysql-client
             
             # Create MySQL backup with timestamp
             BACKUP_FILE=~/fin-invoice-ocr-team6/db_backups/backup-$(date +%Y%m%d%H%M%S).sql
@@ -250,17 +222,13 @@ jobs:
             
             # Keep only last 5 backups
             find ~/fin-invoice-ocr-team6/db_backups -name "backup-*.sql" -type f | sort -r | tail -n +6 | xargs rm -f 2>/dev/null || true
-            
-            # Show successful backups
-            echo "Available database backups:"
-            ls -lt ~/fin-invoice-ocr-team6/db_backups/
           '
 
       - name: Copy Environment File to Server
         run: |
           scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
 
-      - name: Deploy to Staging
+      - name: Create Release Version
         run: |
           ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
             # Create new release directory
@@ -291,66 +259,134 @@ jobs:
               \"commit\": \"${{ github.sha }}\",
               \"actor\": \"${{ github.actor }}\"
             }" > ../release.json
+          '
+
+      - name: Deploy to Green Environment
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Deploy to Green environment (port 3005)
+            # Copy from release to green environment
+            rm -rf ~/fin-invoice-ocr-team6/environments/green/current/*
+            cp -R ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}/* ~/fin-invoice-ocr-team6/environments/green/current/
+            
+            # Set up symlinks
+            cd ~/fin-invoice-ocr-team6/environments/green/current/backend
+            ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
+            
+            # Stop and start Green environment
+            pm2 stop invoice-ocr-backend-green || true
+            pm2 delete invoice-ocr-backend-green || true
+            PORT=3005 pm2 start server.js --name invoice-ocr-backend-green
+            
+            echo "Deployed to Green environment (port 3005)"
+            pm2 list | grep invoice
+          '
+
+      - name: Verify Green Deployment
+        id: verify-green
+        run: |
+          # Wait for application to start
+          sleep 5
+          
+          # Check Green health endpoint
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Testing Green environment health endpoint..."
+            GREEN_HEALTH=$(curl -s http://localhost:3005/health)
+            echo "Green health check response: $GREEN_HEALTH"
+            GREEN_STATUS=$(echo $GREEN_HEALTH | grep -o "\"status\":\"ok\"" || echo "failed")
+            
+            if [ "$GREEN_STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Green environment health check passed!"
+              exit 0
+            else
+              echo "❌ Green environment health check failed!"
+              exit 1
+            fi
+          '
+
+  deploy-blue:
+    name: Deploy to Production (Blue)
+    runs-on: ubuntu-latest
+    needs: deploy-green
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment'
+    steps:
+      - name: Install SSH client
+        run: sudo apt-get install openssh-client
+
+      - name: Create SSH Key
+        run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
+
+      - name: Update SSH Key Permission
+        run: chmod 400 ssh-key.pem
+
+      - name: Deploy to Blue Environment
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Get latest version ID from green environment
+            VERSION_ID=$(cat ~/fin-invoice-ocr-team6/environments/green/current/release.json | grep -o "\"version\":[^,]*" | cut -d":" -f2 | tr -d "\"" | tr -d " ")
+            
+            echo "Deploying version $VERSION_ID to Blue environment (port 3000)"
+            
+            # Deploy to Blue environment (port 3000)
+            # Copy from release to blue environment
+            rm -rf ~/fin-invoice-ocr-team6/environments/blue/current/*
+            cp -R ~/fin-invoice-ocr-team6/releases/$VERSION_ID/* ~/fin-invoice-ocr-team6/environments/blue/current/
+            
+            # Set up symlinks
+            cd ~/fin-invoice-ocr-team6/environments/blue/current/backend
+            ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
             
             # Update current symlink to point to the new release
-            ln -sfn ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }} ~/fin-invoice-ocr-team6/current
+            ln -sfn ~/fin-invoice-ocr-team6/releases/$VERSION_ID ~/fin-invoice-ocr-team6/current
             
-            # Show diagnostics
-            echo "Current symlink points to: $(readlink -f ~/fin-invoice-ocr-team6/current)"
-            echo "PM2 processes before restart:"
-            pm2 list
+            # Stop and start Blue environment
+            pm2 stop invoice-ocr-backend-blue || true
+            pm2 delete invoice-ocr-backend-blue || true
+            PORT=3000 pm2 start server.js --name invoice-ocr-backend-blue
             
-            # Stop existing process if running
+            # Also start the default app (for backwards compatibility)
             pm2 stop invoice-ocr-backend || true
             pm2 delete invoice-ocr-backend || true
+            PORT=3000 pm2 start server.js --name invoice-ocr-backend
             
-            # Start with the new code (explicit path)
-            cd ~/fin-invoice-ocr-team6/current/backend
-            pm2 start server.js --name invoice-ocr-backend
             pm2 save
             
-            echo "PM2 processes after restart:"
-            pm2 list
+            echo "Deployed to Blue environment (port 3000)"
+            pm2 list | grep invoice
             
             # Cleanup old releases (keep only the last 5)
             cd ~/fin-invoice-ocr-team6/releases
             ls -td */ | tail -n +6 | xargs rm -rf 2>/dev/null || true
           '
-          
-      - name: Verify Deployment
+
+      - name: Verify Blue Deployment
         run: |
-          # Wait for the application to fully start
+          # Wait for application to start
           sleep 5
           
-          # Check health endpoint
+          # Check Blue health endpoint
           ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
-            echo "Checking if rollback script exists..."
-            if [ -f ~/fin-invoice-ocr-team6/rollback.sh ]; then
-              echo "Rollback script exists."
-              echo "Checking permissions:"
-              ls -la ~/fin-invoice-ocr-team6/rollback.sh
-            else
-              echo "ERROR: Rollback script does not exist!"
-            fi
+            echo "Testing Blue environment health endpoint..."
+            BLUE_HEALTH=$(curl -s http://localhost:3000/health)
+            echo "Blue health check response: $BLUE_HEALTH"
+            BLUE_STATUS=$(echo $BLUE_HEALTH | grep -o "\"status\":\"ok\"" || echo "failed")
             
-            echo "Testing health endpoint..."
-            HEALTH_CHECK=$(curl -s http://localhost:3000/health)
-            echo "Health check response: $HEALTH_CHECK"
-            STATUS=$(echo $HEALTH_CHECK | grep -o "\"status\":\"ok\"" || echo "failed")
-            
-            if [ "$STATUS" = "\"status\":\"ok\"" ]; then
-              echo "✅ Health check passed!"
+            if [ "$BLUE_STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Blue environment health check passed!"
+              echo "✅ Deployment completed successfully to both Green and Blue environments."
             else
-              echo "❌ Health check failed! Initiating rollback..."
-              echo "Executing rollback script with verbose output:"
-              bash -x ~/fin-invoice-ocr-team6/rollback.sh || echo "Rollback script failed with exit code $?"
+              echo "❌ Blue environment health check failed!"
+              echo "⚠️ Warning: Green environment is working but Blue failed. Traffic is still going to Blue."
+              exit 1
             fi
           '
           
   functional-test:
     name: Run Functional Tests
     runs-on: ubuntu-latest
-    needs: deploy
+    needs: deploy-blue
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -383,14 +419,6 @@ jobs:
             exit 1
           fi
           echo "Environment file created successfully"
-          
-      - name: Verify repository content
-        run: |
-          echo "Current working directory: $(pwd)"
-          echo "Repository content:"
-          ls -la
-          echo "Functional test files directory content:"
-          ls -la functional_test_files/ || echo "Functional test files directory not found!"
           
       - name: Create reports directory
         working-directory: functional_test_files
