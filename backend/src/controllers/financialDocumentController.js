@@ -41,9 +41,9 @@ class FinancialDocumentController {
         const validationResult = await this.validateUploadFile(req.file);
         
         // If file is encrypted
-        if (validationResult && validationResult.isEncrypted) {
+        if (validationResult?.isEncrypted) {
           // If password is provided in the request body, try to decrypt
-          if (req.body && req.body.password) {
+          if (req.body?.password) {
             try {
               // Attempt to decrypt the PDF with the provided password
               const decryptedBuffer = await this.pdfDecryptionService.decrypt(

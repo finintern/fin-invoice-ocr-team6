@@ -4,6 +4,8 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const { spawn } = require('child_process');
+const DecryptLogger = require('../services/decryptLoggerAdapter');
+const Sentry = require("../instrument");
 
 class QpdfDecryption extends PdfDecryptionStrategy {
     constructor() {
@@ -15,8 +17,10 @@ class QpdfDecryption extends PdfDecryptionStrategy {
         return new Promise((resolve, reject) => {                     
             const envPath = process.env.QPDF_PATH;
             if (envPath && fs.existsSync(envPath)) {
+                DecryptLogger.logDecryptionAvailability('QPDF', true);
                 return resolve(envPath);
             }  
+            DecryptLogger.logDecryptionAvailability('QPDF', false);
             reject(new Error('QPDF not found in PATH.'));
         });
     }
@@ -26,13 +30,17 @@ class QpdfDecryption extends PdfDecryptionStrategy {
             const process = spawn(qpdfPath, ['--version']);
             
             process.on('error', (error) => {
+                DecryptLogger.logDecryptionError(0, error, 'QPDF');
                 reject(error);
             });
             
             process.on('close', (code) => {
                 if (code !== 0) {
-                    return reject(new Error('Failed to verify qpdf version'));
+                    const error = new Error('Failed to verify qpdf version');
+                    DecryptLogger.logDecryptionError(0, error, 'QPDF');
+                    return reject(error);
                 }
+                DecryptLogger.logDecryptionAvailability('QPDF', true);
                 resolve();
             });
         });
@@ -50,6 +58,11 @@ class QpdfDecryption extends PdfDecryptionStrategy {
                 // eslint-disable-next-line no-unused-vars
                 .catch(_error => {                    
                     console.warn('QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.');
+                    Sentry.addBreadcrumb({
+                        category: 'pdf-decryption',
+                        message: 'QPDF is not installed or not in PATH',
+                        level: 'warning'
+                    });
                     resolve(false);
                 });
         });
@@ -61,12 +74,14 @@ class QpdfDecryption extends PdfDecryptionStrategy {
         const isAvailable = await this.checkQpdfAvailability();
         
         if (!isAvailable) {
-            throw new Error(
+            const error = new Error(
                 'QPDF is not installed. Please install QPDF to decrypt PDF files.\n' +
                 'Windows: Install from https://qpdf.sourceforge.io/ or using Chocolatey: choco install qpdf\n' +
                 'Linux: sudo apt-get install qpdf\n' +
                 'MacOS: brew install qpdf'
             );
+            DecryptLogger.logDecryptionError(0, error, 'QPDF');
+            throw error;
         }
 
         return new Promise((resolve, reject) => {
@@ -79,7 +94,9 @@ class QpdfDecryption extends PdfDecryptionStrategy {
     
             process.on('close', (code) => {
                 if (code !== 0) {
-                    reject(new Error(`Failed to decrypt PDF: ${stderr.trim()}`));
+                    const error = new Error(`Failed to decrypt PDF: ${stderr.trim()}`);
+                    DecryptLogger.logDecryptionError(0, error, 'QPDF');
+                    reject(error);
                 } else {
                     resolve();
                 }
@@ -112,11 +129,15 @@ class QpdfDecryption extends PdfDecryptionStrategy {
 
     async decrypt(pdfBuffer, password) {
         if (!Buffer.isBuffer(pdfBuffer)) {
-            throw new Error('Invalid input: Expected a Buffer.');
+            const error = new Error('Invalid input: Expected a Buffer.');
+            DecryptLogger.logDecryptionError(0, error, 'QPDF');
+            throw error;
         }
-
         const sanitizedPassword = this.sanitizePassword(password);
 
+        
+        const startTime = Date.now();
+        const fileSize = pdfBuffer.length;
         let tempDir = null;
         let inputPath = null;
         let outputPath = null;
@@ -129,6 +150,15 @@ class QpdfDecryption extends PdfDecryptionStrategy {
             outputPath = path.join(tempDir, 'decrypted.pdf');
 
             fs.writeFileSync(inputPath, pdfBuffer);
+
+
+            DecryptLogger.logDecryptionStart(fileSize, 'QPDF decrypt');
+            Sentry.addBreadcrumb({
+                category: 'pdf-decryption',
+                message: `Decrypting PDF with size ${fileSize} bytes using QPDF`,
+                level: 'info'
+            });
+
             await this.execCommand('qpdf', [
                 `--password=${sanitizedPassword}`,
                 '--decrypt',
@@ -137,17 +167,29 @@ class QpdfDecryption extends PdfDecryptionStrategy {
             ]);            
 
             if (!fs.existsSync(outputPath)) {
-                throw new Error('Failed to decrypt PDF: Output file not created.');
+                const error = new Error('Failed to decrypt PDF: Output file not created.');
+                DecryptLogger.logDecryptionError(fileSize, error, 'QPDF');
+                throw error;
             }
 
             const decryptedPdf = fs.readFileSync(outputPath);
+            const processTime = Date.now() - startTime;
+            DecryptLogger.logDecryptionSuccess(fileSize, processTime, 'QPDF');
+            
             return decryptedPdf;
         } catch (error) {
+            const processTime = Date.now() - startTime;
+            
             if (error.message.toLowerCase().includes('password')) {
-                throw new Error('Failed to decrypt PDF: Incorrect password.');
+                const passwordError = new Error('Failed to decrypt PDF: Incorrect password.');
+                DecryptLogger.logDecryptionError(fileSize, passwordError, 'QPDF', processTime);
+                throw passwordError;
             } else if (error.message.includes('PDF header') || error.message.includes('not a PDF')) {
-                throw new Error('Failed to decrypt PDF: Corrupted file.');
+                const corruptedError = new Error('Failed to decrypt PDF: Corrupted file.');
+                DecryptLogger.logDecryptionError(fileSize, corruptedError, 'QPDF', processTime);
+                throw corruptedError;
             } else {
+                DecryptLogger.logDecryptionError(fileSize, error, 'QPDF', processTime);
                 throw error;  
             }
         } finally {
@@ -166,6 +208,7 @@ class QpdfDecryption extends PdfDecryptionStrategy {
                     }
                 } catch (cleanupError) {
                     console.warn(`Cleanup failed for ${filePath}: ${cleanupError.message}`);
+                    DecryptLogger.logDecryptionError(0, cleanupError, 'QPDF-Cleanup');
                 }
             }
         }
