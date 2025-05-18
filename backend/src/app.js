@@ -14,5 +14,6 @@ app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/sandbox', sandboxRoutes);
 // Setup Swagger documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.disable('x-powered-by');
+
+// Export the app
 module.exports = app;
