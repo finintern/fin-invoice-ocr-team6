@@ -353,6 +353,77 @@ Jika ingin menambah pengujian keamanan baru:
 </details>
 
 <details>
+
+  <summary><strong>Tutorial Profiling dengan JavaScript Debug Terminal</strong></summary>
+
+## Tutorial: Profiling Aplikasi dengan JavaScript Debug Terminal
+
+Tutorial ini menjelaskan langkah-langkah cara melakukan profiling pada aplikasi JavaScript menggunakan VS Code Debug Terminal untuk mengidentifikasi bottleneck performa.
+
+### 1. Persiapan VS Code Debug
+
+1. Buka project Node.js yang ingin diprofile di VS Code
+2. Buka terminal di VS Code dengan menekan `Ctrl+`` (atau menu Terminal > New Terminal)
+3. Ubah terminal biasa menjadi JavaScript Debug Terminal dengan:
+   - Klik dropdown terminal (▾) di pojok kanan atas panel terminal
+   - Pilih "JavaScript Debug Terminal"
+
+### 2. Menambahkan Breakpoints
+
+1. Buka file JavaScript yang ingin di-profile (misalnya `purchaseOrderService.js`)
+2. Tambahkan breakpoint di titik awal fungsi yang ingin dianalisis:
+   - Klik pada gutter (area sebelah kiri nomor baris) pada baris kode yang sesuai
+   - Atau letakkan kursor pada baris kode dan tekan F9
+
+3. **Tips**: Tambahkan breakpoint di awal dan akhir fungsi untuk mengukur durasi eksekusi fungsi tersebut.
+
+### 3. Memulai Profiling
+
+1. Di JavaScript Debug Terminal, jalankan aplikasi seperti biasa:
+   ```bash
+   # Misalnya menjalankan backend
+   npm start
+   ```
+
+2. Lakukan aksi yang mengaktifkan kode target profiling (misalnya upload file atau hit endpoint API)
+
+3. Ketika eksekusi mencapai breakpoint, VS Code akan menampilkan mode debug:
+   - Klik tombol "Continue" atau tekan F5 untuk melanjutkan eksekusi
+   - Klik tombol "Step Over" (F10) untuk menjalankan baris demi baris
+
+### 4. Mengumpulkan Data Profiling
+
+1. Saat aplikasi berhenti di breakpoint, buka panel Debug di sidebar (ikon bug/serangga)
+2. Klik tab "Performance"
+3. Klik tombol "Start Performance Profile" atau "Record Performance Profile" (ikon ⚫)
+4. Lanjutkan atau selesaikan eksekusi kode yang ingin diprofile
+5. Klik tombol "Stop" (ikon ⬛) untuk menghentikan profiling
+
+### 5. Melihat dan Menganalisis Flame Graph
+
+1. Setelah profiling selesai, VS Code akan membuka flame graph secara otomatis:
+
+2. Memahami Flame Graph:
+   - Sumbu X: Representasi distribusi waktu CPU
+   - Sumbu Y: Stack panggilan fungsi (semakin tinggi = semakin dalam)
+   - Lebar frame/blok: Proporsi waktu yang digunakan oleh fungsi tersebut
+   - Warna: Jenis aktivitas
+
+3. Cara menganalisis:
+   - Fokus pada frame/blok yang paling lebar (mengkonsumsi waktu paling banyak)
+   - Zoom in/out menggunakan wheel mouse atau gesture pinch
+   - Hover pada frame untuk melihat detail fungsi dan waktu eksekusi
+
+### 6. Tips Profiling Lanjutan
+
+- **Heap Snapshot**: Untuk analisis memori, gunakan "Take heap snapshot" setelah breakpoint
+- **Kontinyu vs. Selektif**: 
+  - Profiling kontinyu: Rekam seluruh eksekusi program
+  - Profiling selektif: Start/stop manual di sekitar kode yang mencurigakan
+- **Profiling Endpoint API**: Tambahkan breakpoint di handler route untuk menganalisis performa endpoint
+
+</details>
+
 <summary><strong>Tutorial Menambahkan Model OCR</strong></summary>
 
 ## Gambaran Umum
