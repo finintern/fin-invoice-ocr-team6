@@ -78,18 +78,6 @@ jobs:
       - name: Create reports directory 
         run: mkdir -p functional_test_files/reports 
       
-      - name: Create test environment file
-        run: |
-          echo '{
-            "id": "test-env",
-            "name": "Test",
-            "values": [
-              { "key": "baseUrl", "value": "http://localhost:3000", "enabled": true }, 
-              { "key": "client_id", "value": "client_dummy", "enabled": true }, 
-              { "key": "client_secret", "value": "secret_dummy", "enabled": true }
-            ]
-          }' > functional_test_files/test-environment.json
-      
       - name: Run Functional Tests with htmlextra
         working-directory: functional_test_files
         run: |
