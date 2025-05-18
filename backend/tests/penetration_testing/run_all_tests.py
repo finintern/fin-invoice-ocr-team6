@@ -28,6 +28,7 @@ def main():
     
     args = parser.parse_args()
     
+    print()
     print(f"{Fore.CYAN}🔒 OCR GROUP 6 API FULL PENETRATION TESTING SUITE 🔒{Style.RESET_ALL}")
     print("=" * 70)
     print(f"{Fore.YELLOW}Target URL: {args.url}{Style.RESET_ALL}")
