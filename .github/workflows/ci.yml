@@ -306,7 +306,7 @@ jobs:
             
             # Start with the new code (explicit path)
             cd ~/fin-invoice-ocr-team6/current/backend
-            pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
+            pm2 start server.js --name invoice-ocr-backend
             pm2 save
             
             echo "PM2 processes after restart:"
@@ -417,4 +417,3 @@ jobs:
         with:
           name: functional-test-report
           path: functional_test_files/reports/functional-test-report.html
-          

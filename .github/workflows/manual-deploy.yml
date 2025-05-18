@@ -183,7 +183,7 @@ jobs:
             
             # Start with the new code (explicit path)
             cd ~/fin-invoice-ocr-team6/current/backend
-            pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
+            pm2 start server.js --name invoice-ocr-backend
             pm2 save
             
             echo "PM2 processes after restart:"
@@ -273,7 +273,7 @@ jobs:
                 pm2 delete invoice-ocr-backend || true
                 
                 cd ~/fin-invoice-ocr-team6/current/backend
-                pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
+                pm2 start server.js --name invoice-ocr-backend
                 pm2 save
                 
                 echo "Rollback to version $VERSION completed"

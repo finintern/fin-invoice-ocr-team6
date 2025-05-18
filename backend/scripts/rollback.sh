@@ -79,7 +79,7 @@ echo "Updated current symlink to: $(readlink -f ~/fin-invoice-ocr-team6/current)
 # Restart application with delete + start approach (same as deployment)
 cd ~/fin-invoice-ocr-team6/current/backend
 pm2 delete invoice-ocr-backend || true
-pm2 start server.js --name invoice-ocr-backend --watch --ignore-watch="uploads"
+pm2 start server.js --name invoice-ocr-backend
 pm2 save
 
 echo "Rollback completed successfully"
