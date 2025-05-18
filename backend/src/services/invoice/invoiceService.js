@@ -7,7 +7,7 @@ const InvoiceRepository = require('../../repositories/invoiceRepository.js');
 const CustomerRepository = require('../../repositories/customerRepository.js');
 const VendorRepository = require('../../repositories/vendorRepository.js');
 const ItemRepository = require('../../repositories/itemRepository.js');
-const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer.js');
+const { OcrAnalyzerFactory } = require('../analysis');
 const InvoiceValidator = require('./invoiceValidator.js');
 const InvoiceResponseFormatter = require('./invoiceResponseFormatter.js');
 const { AzureInvoiceMapper } = require('../invoiceMapperService/invoiceMapperService.js');
@@ -28,7 +28,10 @@ class InvoiceService extends FinancialDocumentService {
     this.itemRepository = dependencies.itemRepository || new ItemRepository();
 
     // Inisialisasi services
-    this.documentAnalyzer = dependencies.documentAnalyzer || new AzureDocumentAnalyzer();
+    this.ocrType = dependencies.ocrType || process.env.OCR_ANALYZER_TYPE || 'azure';
+    this.ocrConfig = dependencies.ocrConfig || {};
+    this.documentAnalyzer = dependencies.documentAnalyzer || 
+                            OcrAnalyzerFactory.createAnalyzer(this.ocrType, this.ocrConfig);
     this.validator = dependencies.validator || new InvoiceValidator();
     this.responseFormatter = dependencies.responseFormatter || new InvoiceResponseFormatter();
     this.azureMapper = dependencies.azureMapper || new AzureInvoiceMapper();
@@ -354,20 +357,26 @@ function createInvoiceService(customDependencies = {}) {
   const CustomerRepository = require('../../repositories/customerRepository.js');
   const VendorRepository = require('../../repositories/vendorRepository.js');
   const ItemRepository = require('../../repositories/itemRepository.js');
-  const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer');
+  const { OcrAnalyzerFactory } = require('../analysis');
   const InvoiceValidator = require('./invoiceValidator');
   const InvoiceResponseFormatter = require('./invoiceResponseFormatter');
   const { AzureInvoiceMapper } = require('../invoiceMapperService/invoiceMapperService');
   const InvoiceLogger = require('./invoiceLogger');
   const s3Service = require('../s3Service');
 
+  // Get OCR type from environment or use default
+  const ocrType = process.env.OCR_ANALYZER_TYPE || 'azure';
+  const ocrConfig = {};
+  
   // Gabungkan default dependencies dengan custom dependencies
   const dependencies = {
     invoiceRepository: new InvoiceRepository(),
     customerRepository: new CustomerRepository(),
     vendorRepository: new VendorRepository(),
     itemRepository: new ItemRepository(),
-    documentAnalyzer: new AzureDocumentAnalyzer(),
+    documentAnalyzer: OcrAnalyzerFactory.createAnalyzer(ocrType, ocrConfig),
+    ocrType,
+    ocrConfig,
     validator: new InvoiceValidator(),
     responseFormatter: new InvoiceResponseFormatter(),
     azureMapper: new AzureInvoiceMapper(),
