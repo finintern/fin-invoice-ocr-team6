@@ -6,7 +6,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    environment: test
+
+    env: 
+      NODE_ENV: test
+      SENTRY_ENVIRONMENT: functional-test
 
     services:
       mysql:
