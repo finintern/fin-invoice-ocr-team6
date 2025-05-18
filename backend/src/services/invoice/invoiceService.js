@@ -267,18 +267,12 @@ class InvoiceService extends FinancialDocumentService {
 
         if (invoice.status === DocumentStatus.PROCESSING) {
           InvoiceLogger.logRetrievalProcessing(invoiceId);
-          return of({
-            message: "Invoice is still being processed. Please try again later.",
-            data: { documents: [] }
-          });
+          return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.PROCESSING));
         }
 
         if (invoice.status === DocumentStatus.FAILED) {
           InvoiceLogger.logRetrievalFailed(invoiceId);
-          return of({
-            message: "Invoice processing failed. Please re-upload the document.",
-            data: { documents: [] }
-          });
+          return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.FAILED));
         }
 
         const items$ = from(this.itemRepository.findItemsByDocumentId(invoiceId, 'Invoice'));
