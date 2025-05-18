@@ -1,0 +1,56 @@
+{
+    "id": "test-env",
+    "name": "Test",
+    "values": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:3000",
+            "enabled": true
+        },
+        {
+            "key": "client_id",
+            "value": "client_dummy",
+            "enabled": true
+        },
+        {
+            "key": "client_secret",
+            "value": "secret_dummy",
+            "enabled": true
+        }, 
+        {
+            "key": "invoice_id",
+            "value": "dummy_invoice_id",
+            "enabled": true
+        },
+        {
+            "key": "po_id",
+            "value": "dummy_po_id",
+            "enabled": true
+        },
+        {
+            "key": "invoice_id_forbidden",
+            "value": "another_invoice_id",
+            "enabled": true
+        },
+        {
+            "key": "po_id_forbidden",
+            "value": "another_po_id",
+            "enabled": true
+        },
+        {
+            "key": "po_id_processing",
+            "value": "dummy_po_id_processing",
+            "enabled": true
+        },
+        {
+            "key": "po_id_failed",
+            "value": "dummy_po_id_failed", 
+            "enabled": true
+        },
+        {
+            "key": "invoice_id_to_delete",
+            "value": "another_invoice_id",
+            "enabled": true
+        }
+    ]
+}
