@@ -58,12 +58,10 @@ const mockGetInvoiceStatus = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Create a mock invoice status
+    // Create a mock invoice status with only id and status
     const mockStatus = {
       id: id,
-      status: DocumentStatus.ANALYZED, // Using the real status enum
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      status: DocumentStatus.ANALYZED // Using the real status enum
     };
 
     // Log the mock request
