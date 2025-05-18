@@ -4,7 +4,16 @@ const QpdfDecryption = require('../strategies/qpdfDecryption');
 const { safeResponse } = require('../utils/responseHelper');
 const { ValidationError, AuthError, ForbiddenError, PayloadTooLargeError, UnsupportedMediaTypeError, NotFoundError } = require('../utils/errors');
 
+/**
+ * Base controller class for handling financial document operations
+ * @class FinancialDocumentController
+ */
 class FinancialDocumentController {
+  /**
+   * Creates a new instance of FinancialDocumentController
+   * @param {Object} service - The service to use for document operations
+   * @param {string} documentType - The type of financial document being processed
+   */
   constructor(service, documentType) {
     this.service = service;
     this.documentType = documentType;
@@ -12,6 +21,13 @@ class FinancialDocumentController {
       this.pdfDecryptionService = new PdfDecryptionService(new QpdfDecryption());
   }
 
+  /**
+   * Executes a function with a timeout
+   * @param {Function} fn - The function to execute
+   * @param {number} timeoutMs - Timeout in milliseconds
+   * @returns {Promise<any>} The result of the function
+   * @throws {Error} If the execution times out or the function throws
+   */
   async executeWithTimeout(fn, timeoutMs = process.env.UPLOAD_TIMEOUT || 3000) {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
@@ -32,6 +48,12 @@ class FinancialDocumentController {
     }
   }
 
+  /**
+   * Handles file upload requests
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   * @returns {Promise<Object>} Response with the upload result
+   */
   async uploadFile(req, res) {
     try {
       await this.executeWithTimeout(async () => {
@@ -82,6 +104,12 @@ class FinancialDocumentController {
     }
   }
 
+  /**
+   * Validates the upload request
+   * @param {Object} req - Express request object
+   * @throws {AuthError} If user is not authenticated
+   * @throws {ValidationError} If no file is uploaded
+   */
   async validateUploadRequest(req) {
     if (!req.user) {
       throw new AuthError("Unauthorized");
@@ -91,6 +119,17 @@ class FinancialDocumentController {
     }
   }
 
+  /**
+   * Validates the uploaded file
+   * @param {Object} file - File object from multer
+   * @param {Buffer} file.buffer - File contents
+   * @param {string} file.mimetype - File MIME type
+   * @param {string} file.originalname - Original filename
+   * @returns {Promise<Object>} Validation result with encryption status
+   * @throws {ValidationError} If validation fails
+   * @throws {UnsupportedMediaTypeError} If file type is not supported
+   * @throws {PayloadTooLargeError} If file is too large
+   */
   async validateUploadFile(file) {
     const { buffer, mimetype, originalname } = file;
     try {
@@ -110,12 +149,22 @@ class FinancialDocumentController {
     } 
   }
 
-  // make sure to implement this method in child
-  // eslint-disable-next-line no-unused-vars
+  /**
+   * Processes the upload based on the document type
+   * @param {Object} req - Express request object
+   * @returns {Promise<Object>} Processing result
+   * @throws {Error} Must be implemented by child classes
+   */
   async processUpload(_req) {
     throw new Error('processUpload must be implemented by child classes');
   }
 
+  /**
+   * Handles errors and sends appropriate HTTP responses
+   * @param {Object} res - Express response object
+   * @param {Error} error - The error to handle
+   * @returns {Object} HTTP response with appropriate status code and message
+   */
   handleError(res, error) {
     if (error instanceof ValidationError) {
       // Special case for password errors - don't log these
