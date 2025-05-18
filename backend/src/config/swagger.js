@@ -10,7 +10,7 @@ const options = {
       description: 'API documentation for financial invoice and purchase order OCR processing system',
       contact: {
         name: 'Team 6',
-        url: 'https://github.com/yourusername/fin-invoice-ocr-team6',
+        url: 'https://github.com/finintern/fin-invoice-ocr-team6',
       },
     },
     servers: [
