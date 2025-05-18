@@ -7,7 +7,7 @@ const InvoiceRepository = require('../../repositories/invoiceRepository.js');
 const CustomerRepository = require('../../repositories/customerRepository.js');
 const VendorRepository = require('../../repositories/vendorRepository.js');
 const ItemRepository = require('../../repositories/itemRepository.js');
-const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer.js');
+const { OcrAnalyzerFactory } = require('../analysis');
 const InvoiceValidator = require('./invoiceValidator.js');
 const InvoiceResponseFormatter = require('./invoiceResponseFormatter.js');
 const { AzureInvoiceMapper } = require('../invoiceMapperService/invoiceMapperService.js');
@@ -23,23 +23,26 @@ class InvoiceService extends FinancialDocumentService {
   constructor(dependencies = {}) {
     // Panggil konstruktor parent dengan type dokumen dan s3Service
     super("Invoice", dependencies.s3Service);
-    
+
     // Inisialisasi repositories
     this.invoiceRepository = dependencies.invoiceRepository || new InvoiceRepository();
     this.customerRepository = dependencies.customerRepository || new CustomerRepository();
     this.vendorRepository = dependencies.vendorRepository || new VendorRepository();
     this.itemRepository = dependencies.itemRepository || new ItemRepository();
-    
+
     // Inisialisasi services
-    this.documentAnalyzer = dependencies.documentAnalyzer || new AzureDocumentAnalyzer();
+    this.ocrType = dependencies.ocrType || process.env.OCR_ANALYZER_TYPE || 'azure';
+    this.ocrConfig = dependencies.ocrConfig || {};
+    this.documentAnalyzer = dependencies.documentAnalyzer || 
+                            OcrAnalyzerFactory.createAnalyzer(this.ocrType, this.ocrConfig);
     this.validator = dependencies.validator || new InvoiceValidator();
     this.responseFormatter = dependencies.responseFormatter || new InvoiceResponseFormatter();
     this.azureMapper = dependencies.azureMapper || new AzureInvoiceMapper();
-    
+
     // Logger menggunakan nilai default jika tidak ada
     this.logger = dependencies.logger || this.logger;
   }
-  
+
   async uploadInvoice(fileData, skipAnalysis = false) {
     try {
       this.validator.validateFileData(fileData);
@@ -93,7 +96,7 @@ class InvoiceService extends FinancialDocumentService {
       });
 
       let analysisResult;
-      
+
       if (skipAnalysis) {
         // Use sample data instead of analyzing with Azure
         analysisResult = await this.loadSampleData();
@@ -257,40 +260,34 @@ class InvoiceService extends FinancialDocumentService {
         if (!invoice) {
           return throwError(() => new NotFoundError("Invoice not found"));
         }
-  
+
         if (invoice.status === DocumentStatus.PROCESSING) {
-          return of({
-            message: "Invoice is still being processed. Please try again later.",
-            data: { documents: [] }
-          });
+          return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.PROCESSING));
         }
-  
+
         if (invoice.status === DocumentStatus.FAILED) {
-          return of({
-            message: "Invoice processing failed. Please re-upload the document.",
-            data: { documents: [] }
-          });
+          return of(this.responseFormatter.formatStatusResponse(invoice, DocumentStatus.FAILED));
         }
-  
+
         const items$ = from(this.itemRepository.findItemsByDocumentId(invoiceId, 'Invoice'));
-        const customer$ = invoice.customer_id 
-          ? from(this.customerRepository.findById(invoice.customer_id)) 
+        const customer$ = invoice.customer_id
+          ? from(this.customerRepository.findById(invoice.customer_id))
           : of(null);
-        const vendor$ = invoice.vendor_id 
-          ? from(this.vendorRepository.findById(invoice.vendor_id)) 
+        const vendor$ = invoice.vendor_id
+          ? from(this.vendorRepository.findById(invoice.vendor_id))
           : of(null);
-  
+
         return forkJoin({ items: items$, customer: customer$, vendor: vendor$ }).pipe(
-          map(({ items, customer, vendor }) => 
+          map(({ items, customer, vendor }) =>
             this.responseFormatter.formatInvoiceResponse(invoice, items, customer, vendor)
           )
         );
       }),
       catchError(error => {
         console.error("Error retrieving invoice:", error);
-        return throwError(() => 
-          error.message === "Invoice not found" 
-            ? error 
+        return throwError(() =>
+          error.message === "Invoice not found"
+            ? error
             : new Error("Failed to retrieve invoice: " + error.message)
         );
       })
@@ -318,8 +315,7 @@ class InvoiceService extends FinancialDocumentService {
         })
       );
   }
-  
-    
+
   async getInvoiceStatus(invoiceId) {
     try {
       const invoice = await this.invoiceRepository.findById(invoiceId);
@@ -333,7 +329,7 @@ class InvoiceService extends FinancialDocumentService {
         id: invoice.id,
         status: invoice.status
       };
-      
+
       // Log successful status request
       this.logger.logStatusRequest?.(invoiceId, invoice.status);
 
@@ -342,7 +338,7 @@ class InvoiceService extends FinancialDocumentService {
       if (error instanceof NotFoundError) {
         throw error;
       }
-      
+
       // Log error during status retrieval
       this.logger.logStatusError?.(invoiceId, error);
       Sentry.captureException(error);
@@ -367,12 +363,16 @@ function createInvoiceService(customDependencies = {}) {
   const CustomerRepository = require('../../repositories/customerRepository.js');
   const VendorRepository = require('../../repositories/vendorRepository.js');
   const ItemRepository = require('../../repositories/itemRepository.js');
-  const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer');
+  const { OcrAnalyzerFactory } = require('../analysis');
   const InvoiceValidator = require('./invoiceValidator');
   const InvoiceResponseFormatter = require('./invoiceResponseFormatter');
   const { AzureInvoiceMapper } = require('../invoiceMapperService/invoiceMapperService');
   const InvoiceLogger = require('./invoiceLogger');
   const s3Service = require('../s3Service');
+
+  // Get OCR type from environment or use default
+  const ocrType = process.env.OCR_ANALYZER_TYPE || 'azure';
+  const ocrConfig = {};
   
   // Gabungkan default dependencies dengan custom dependencies
   const dependencies = {
@@ -380,7 +380,9 @@ function createInvoiceService(customDependencies = {}) {
     customerRepository: new CustomerRepository(),
     vendorRepository: new VendorRepository(),
     itemRepository: new ItemRepository(),
-    documentAnalyzer: new AzureDocumentAnalyzer(),
+    documentAnalyzer: OcrAnalyzerFactory.createAnalyzer(ocrType, ocrConfig),
+    ocrType,
+    ocrConfig,
     validator: new InvoiceValidator(),
     responseFormatter: new InvoiceResponseFormatter(),
     azureMapper: new AzureInvoiceMapper(),
@@ -388,7 +390,7 @@ function createInvoiceService(customDependencies = {}) {
     s3Service: s3Service,
     ...customDependencies
   };
-  
+
   return new InvoiceService(dependencies);
 }
 // Buat instance default untuk kompatibilitas
