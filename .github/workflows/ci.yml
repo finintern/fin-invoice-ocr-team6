@@ -193,6 +193,7 @@ jobs:
             mkdir -p ~/fin-invoice-ocr-team6/backups
             mkdir -p ~/fin-invoice-ocr-team6/shared
             mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
+            mkdir -p ~/fin-invoice-ocr-team6/db_backups
           "
       
       - name: Create Pre-Deployment Backup
@@ -220,6 +221,39 @@ jobs:
             else
               echo "No current deployment found to backup"
             fi
+          '
+
+      - name: Create MySQL Database Backup
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Load environment variables
+            source ~/fin-invoice-ocr-team6/shared/.env
+            
+            # Create DB backup directory
+            mkdir -p ~/fin-invoice-ocr-team6/db_backups
+            
+            echo "Creating MySQL database backup..."
+            
+            # Install mysqldump if needed
+            which mysqldump >/dev/null || sudo apt-get -y install mysql-client
+            
+            # Create MySQL backup with timestamp
+            BACKUP_FILE=~/fin-invoice-ocr-team6/db_backups/backup-$(date +%Y%m%d%H%M%S).sql
+            mysqldump -h $DB_HOST -P $DB_PORT -u $DB_USER -p$DB_PASSWORD $DB_NAME > $BACKUP_FILE
+            
+            if [ $? -eq 0 ]; then
+              echo "MySQL backup completed successfully: $BACKUP_FILE"
+              ls -lh $BACKUP_FILE
+            else
+              echo "MySQL backup failed!"
+            fi
+            
+            # Keep only last 5 backups
+            find ~/fin-invoice-ocr-team6/db_backups -name "backup-*.sql" -type f | sort -r | tail -n +6 | xargs rm -f 2>/dev/null || true
+            
+            # Show successful backups
+            echo "Available database backups:"
+            ls -lt ~/fin-invoice-ocr-team6/db_backups/
           '
 
       - name: Copy Environment File to Server
