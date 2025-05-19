@@ -237,9 +237,11 @@ describe("Purchase Order Controller", () => {
   describe("getPurchaseOrderById", () => {
     beforeEach(() => {
       purchaseOrderService.getPurchaseOrderById = jest.fn();
+      purchaseOrderService.getPartnerId = jest.fn();
+      jest.clearAllMocks();
     });
     
-    test("should return purchase order when authorized", async () => {
+    test("should return purchase order when authorized", (done) => {
       const mockPurchaseOrder = {
         id: "po-123",
         data: {
@@ -255,115 +257,142 @@ describe("Purchase Order Controller", () => {
       const testData = setupTestData();
       Object.assign(req, testData);
 
+      // Setup the mocks to work with observable pattern
       purchaseOrderService.getPartnerId.mockResolvedValue("test-uuid");
       purchaseOrderService.getPurchaseOrderById.mockResolvedValue(mockPurchaseOrder);
-
-      await controller.getPurchaseOrderById(req, res);
-
-      expect(purchaseOrderService.getPartnerId).toHaveBeenCalledWith("1");
-      expect(purchaseOrderService.getPurchaseOrderById).toHaveBeenCalledWith("1");
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockPurchaseOrder);
+      
+      // Call the method
+      controller.getPurchaseOrderById(req, res);
+      
+      // Use setTimeout to allow observable to complete
+      setTimeout(() => {
+        expect(purchaseOrderService.getPartnerId).toHaveBeenCalledWith("1");
+        expect(purchaseOrderService.getPurchaseOrderById).toHaveBeenCalledWith("1");
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(mockPurchaseOrder);
+        done();
+      }, 50);
     });
 
-    test("should return 401 when user is not authenticated", async () => {
+    test("should return 401 when user is not authenticated", (done) => {
       const testData = setupTestData({ user: undefined });
       Object.assign(req, testData);
 
-      await controller.getPurchaseOrderById(req, res);
+      controller.getPurchaseOrderById(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(401);
-      expect(res.json).toHaveBeenCalledWith({
-        message: "Unauthorized"
-      });
-      expect(purchaseOrderService.getPurchaseOrderById).not.toHaveBeenCalled();
+      setTimeout(() => {
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({
+          message: "Unauthorized"
+        });
+        expect(purchaseOrderService.getPurchaseOrderById).not.toHaveBeenCalled();
+        done();
+      }, 50);
     });
 
-    test("should return 400 when purchase order ID is null", async () => {
+    test("should return 400 when purchase order ID is null", (done) => {
       const testData = setupTestData({ params: { id: null } });
       Object.assign(req, testData);
 
-      await controller.getPurchaseOrderById(req, res);
+      controller.getPurchaseOrderById(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        message: "Purchase order ID is required"
-      });
-      expect(purchaseOrderService.getPurchaseOrderById).not.toHaveBeenCalled();
+      setTimeout(() => {
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({
+          message: "Purchase order ID is required"
+        });
+        expect(purchaseOrderService.getPurchaseOrderById).not.toHaveBeenCalled();
+        done();
+      }, 50);
     });
 
-    test("should return 403 when accessing another user's purchase order", async () => {
+    test("should return 403 when accessing another user's purchase order", (done) => {
       const testData = setupTestData();
       Object.assign(req, testData);
 
       purchaseOrderService.getPartnerId.mockResolvedValue("other-uuid");
 
-      await controller.getPurchaseOrderById(req, res);
+      controller.getPurchaseOrderById(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith({
-        message: "Forbidden: You do not have access to this purchase order"
-      });
-      expect(purchaseOrderService.getPurchaseOrderById).not.toHaveBeenCalled();
+      setTimeout(() => {
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({
+          message: "Forbidden: You do not have access to this purchase order"
+        });
+        expect(purchaseOrderService.getPurchaseOrderById).not.toHaveBeenCalled();
+        done();
+      }, 50);
     });
 
-    test("should return 404 when purchase order not found", async () => {
+    test("should return 404 when purchase order not found", (done) => {
       const testData = setupTestData();
       Object.assign(req, testData);
 
       purchaseOrderService.getPartnerId.mockResolvedValue("test-uuid");
       purchaseOrderService.getPurchaseOrderById.mockResolvedValue(null);
 
-      await controller.getPurchaseOrderById(req, res);
+      controller.getPurchaseOrderById(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({
-        message: "Purchase order not found"
-      });
+      setTimeout(() => {
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({
+          message: "Purchase order not found"
+        });
+        done();
+      }, 50);
     });
 
-    test("should return 500 when an unexpected error occurs", async () => {
+    test("should return 500 when an unexpected error occurs", (done) => {
       const testData = setupTestData();
       Object.assign(req, testData);
 
       purchaseOrderService.getPartnerId.mockRejectedValue(new Error("Database error"));
 
-      await controller.getPurchaseOrderById(req, res);
+      controller.getPurchaseOrderById(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        message: "Internal server error"
-      });
+      setTimeout(() => {
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({
+          message: "Internal server error"
+        });
+        done();
+      }, 50);
     });
 
-    test("should return 500 when purchase order service throws an error", async () => {
+    test("should return 500 when purchase order service throws an error", (done) => {
       const testData = setupTestData();
       Object.assign(req, testData);
 
       purchaseOrderService.getPartnerId.mockResolvedValue("test-uuid");
       purchaseOrderService.getPurchaseOrderById.mockRejectedValue(new Error("Service error"));
 
-      await controller.getPurchaseOrderById(req, res);
+      controller.getPurchaseOrderById(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        message: "Internal server error"
-      });
+      setTimeout(() => {
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({
+          message: "Internal server error"
+        });
+        done();
+      }, 50);
     });
 
-    test("should handle the case when getPurchaseOrderById returns undefined", async () => {
+    test("should handle the case when getPurchaseOrderById returns undefined", (done) => {
       const testData = setupTestData();
       Object.assign(req, testData);
 
       purchaseOrderService.getPartnerId.mockResolvedValue("test-uuid");
       purchaseOrderService.getPurchaseOrderById.mockResolvedValue(undefined);
 
-      await controller.getPurchaseOrderById(req, res);
+      controller.getPurchaseOrderById(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({
-        message: "Purchase order not found"
-      });
+      setTimeout(() => {
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({
+          message: "Purchase order not found"
+        });
+        done();
+      }, 50);
     });
   });
 
