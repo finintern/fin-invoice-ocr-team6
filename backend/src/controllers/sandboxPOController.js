@@ -151,8 +151,33 @@ const mockGetPurchaseOrderById = async (req, res) => {
   }
 };
 
+/**
+ * Mock delete purchase order by ID
+ */
+const mockDeletePurchaseOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Log the mock request
+    console.log(`[SANDBOX] Mock delete purchase order for ID: ${id}`);
+
+    // Return a success response
+    return res.status(200).json({
+      message: "Purchase order successfully deleted",
+      id: id
+    });
+  } catch (error) {
+    console.error("[SANDBOX] Error in mock delete purchase order:", error);
+    return res.status(500).json({
+      message: "Error in sandbox purchase order deletion",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   mockUploadPurchaseOrder,
   mockGetPurchaseOrderStatus,
-  mockGetPurchaseOrderById
+  mockGetPurchaseOrderById,
+  mockDeletePurchaseOrderById
 };
