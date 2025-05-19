@@ -351,3 +351,181 @@ Jika ingin menambah pengujian keamanan baru:
 5. Tambahkan rekomendasi yang sesuai di metode `print_report()`
 
 </details>
+
+<details>
+  <summary><strong>Tutorial Dokumentasi API dengan Swagger</strong></summary>
+
+## Tutorial: Dokumentasi API dengan Swagger
+
+Tutorial ini menjelaskan cara mendokumentasikan endpoint API menggunakan Swagger dan cara mengakses dokumentasi tersebut untuk testing.
+
+### 1. Persiapan
+
+Swagger sudah diintegrasikan ke dalam proyek ini menggunakan paket `swagger-jsdoc` dan `swagger-ui-express`. Konfigurasi dasar dapat ditemukan di file:
+
+```
+backend/src/config/swagger.js
+```
+
+Pastikan package yang diperlukan telah terinstal:
+
+```bash
+npm install swagger-jsdoc swagger-ui-express
+```
+
+### 2. Cara Mendokumentasikan Endpoint API
+
+Untuk mendokumentasikan endpoint API baru, tambahkan JSDoc comments di atas handler route di file route yang sesuai (dalam direktori `backend/src/routes/`).
+
+#### Contoh Dokumentasi untuk Endpoint GET:
+
+```javascript
+/**
+ * @swagger
+ * /api/invoices:
+ *   get:
+ *     summary: Mengambil daftar invoice
+ *     description: Mengembalikan daftar semua invoice yang tersedia di database
+ *     tags: [Invoices]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Jumlah maksimum item yang akan dikembalikan
+ *     responses:
+ *       200:
+ *         description: Daftar invoice berhasil diambil
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Invoice'
+ *       401:
+ *         description: Tidak terautentikasi
+ *       500:
+ *         description: Server error
+ */
+router.get('/invoices', invoiceController.getAllInvoices);
+```
+
+#### Contoh Dokumentasi untuk Endpoint POST:
+
+```javascript
+/**
+ * @swagger
+ * /api/purchase-orders:
+ *   post:
+ *     summary: Upload purchase order baru
+ *     description: Mengunggah file purchase order baru untuk diproses
+ *     tags: [Purchase Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: File PDF purchase order
+ *               partner_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID partner terkait
+ *             required:
+ *               - file
+ *     responses:
+ *       202:
+ *         description: Purchase order berhasil diunggah dan sedang diproses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PurchaseOrderStatus'
+ *       400:
+ *         description: Parameter tidak valid
+ *       401:
+ *         description: Tidak terautentikasi
+ *       500:
+ *         description: Server error
+ */
+router.post('/purchase-orders', uploadMiddleware, poController.uploadPurchaseOrder);
+```
+
+### 3. Mengakses Dokumentasi Swagger
+
+Untuk melihat dan berinteraksi dengan dokumentasi API:
+
+1. Jalankan server backend:
+   ```bash
+   cd backend
+   npm start
+   ```
+
+2. Buka browser dan kunjungi:
+   ```
+   http://localhost:3000/api-docs
+   ```
+
+3. Anda akan melihat UI Swagger yang menampilkan semua endpoint API yang telah didokumentasikan.
+
+### 4. Menggunakan Swagger UI untuk Testing API
+
+Swagger UI memungkinkan Anda untuk menguji API langsung dari browser:
+
+1. Klik pada endpoint yang ingin diuji untuk memperluas detailnya
+2. Klik tombol "Try it out"
+3. Isi parameter yang diperlukan (jika ada)
+4. Klik "Execute" untuk mengirim request
+5. Hasil respons akan ditampilkan di bawah, termasuk status code, response headers, dan response body
+
+### 5. Menambahkan Skema Model baru
+
+Skema model didefinisikan di file `backend/src/config/swagger.js`. Untuk menambahkan model baru:
+
+1. Buka file `swagger.js`
+2. Cari bagian `components: { schemas: { ... } }`
+3. Tambahkan definisi model baru, misalnya:
+
+```javascript
+NewModel: {
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+      example: '123e4567-e89b-12d3-a456-426614174000'
+    },
+    name: {
+      type: 'string',
+      example: 'Sample Name'
+    },
+    // Tambahkan property lain sesuai kebutuhan
+  }
+}
+```
+
+### 6. Tips Dokumentasi API yang Baik
+
+- **Konsistensi**: Gunakan format yang konsisten untuk semua endpoint
+- **Kelengkapan**: Dokumentasikan semua parameter, request body, dan kemungkinan response
+- **Contoh**: Sertakan contoh request dan response
+- **Pengelompokan**: Gunakan tag untuk mengelompokkan endpoint terkait
+- **Deskripsi**: Berikan deskripsi yang jelas tentang apa yang dilakukan endpoint
+- **Autentikasi**: Dokumentasikan kebutuhan autentikasi dengan jelas
+
+### 7. Struktur Tags
+
+Untuk menjaga agar dokumentasi API terorganisir dengan baik, gunakan tag-tag berikut:
+
+- `Invoices`: Untuk endpoint terkait invoice
+- `Purchase Orders`: Untuk endpoint terkait purchase order
+
+</details>
