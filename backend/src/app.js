@@ -13,4 +13,9 @@ app.use('/health', healthRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
 
+// Add hello endpoint
+app.get('/hello', (req, res) => {
+  res.send('hi');
+});
+
 module.exports = app;
