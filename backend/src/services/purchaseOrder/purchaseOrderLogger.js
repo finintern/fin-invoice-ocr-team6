@@ -41,6 +41,18 @@ class PurchaseOrderLoggerAdapter {
   static logError(purchaseOrderId, error, stage) {
     return PurchaseOrderLogger.getInstance().logError(purchaseOrderId, error, stage);
   }
+
+  static logDeletionInitiated(purchaseOrderId) {
+    return PurchaseOrderLogger.getInstance().logDeletionInitiated(purchaseOrderId);
+  }
+
+  static logDeletionSuccess(purchaseOrderId) {
+    return PurchaseOrderLogger.getInstance().logDeletionSuccess(purchaseOrderId);
+  }
+
+  static logDeletionError(purchaseOrderId, error) {
+    return PurchaseOrderLogger.getInstance().logDeletionError(purchaseOrderId, error);
+  }
 }
 
 module.exports = PurchaseOrderLoggerAdapter;

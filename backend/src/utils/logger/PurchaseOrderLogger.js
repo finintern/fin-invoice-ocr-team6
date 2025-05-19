@@ -137,6 +137,41 @@ class PurchaseOrderLogger extends BaseLogger {
     
     this.error('Error during purchase order processing', metadata);
   }
+
+  /**
+   * Log when a purchase order deletion is initiated
+   * @param {string} purchaseOrderId - The ID of the purchase order to be deleted
+   */
+  logDeletionInitiated(purchaseOrderId) {
+    const metadata = this.createMetadata({ purchaseOrderId }, 'DELETION_INITIATED');
+    this.info('Purchase order deletion initiated', metadata);
+  }
+
+  /**
+   * Log when a purchase order is successfully deleted
+   * @param {string} purchaseOrderId - The ID of the purchase order that was deleted
+   */
+  logDeletionSuccess(purchaseOrderId) {
+    const metadata = this.createMetadata({ purchaseOrderId }, 'DELETION_SUCCESS');
+    this.info('Purchase order deleted successfully', metadata);
+  }
+
+  /**
+   * Log when there's an error deleting a purchase order
+   * @param {string} purchaseOrderId - The ID of the purchase order
+   * @param {Error} error - The error that occurred
+   */
+  logDeletionError(purchaseOrderId, error) {
+    const metadata = this.createMetadata({
+      purchaseOrderId,
+      error: error?.message || 'Unknown error',
+      errorCode: error?.code || '',
+      errorName: error?.name || '',
+      stack: error?.stack || ''
+    }, 'DELETION_ERROR');
+    
+    this.error('Error deleting purchase order', metadata);
+  }
 }
 
 module.exports = PurchaseOrderLogger;

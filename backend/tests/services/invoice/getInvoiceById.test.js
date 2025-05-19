@@ -9,7 +9,7 @@ describe('InvoiceService - getInvoiceById', () => {
   let mockCustomerRepository;
   let mockVendorRepository;
   let mockResponseFormatter;
-  
+
   // Sample data for testing
   const sampleInvoice = {
     id: '123e4567-e89b-12d3-a456-426614174000',
@@ -23,15 +23,15 @@ describe('InvoiceService - getInvoiceById', () => {
     due_date: '2023-12-31',
     total_amount: 1000.00
   };
-  
+
   const sampleItems = [
     { id: 'item-1', description: 'Item 1', quantity: 2, unit: 'pcs', unit_price: 100.00, amount: 200.00 },
     { id: 'item-2', description: 'Item 2', quantity: 4, unit: 'pcs', unit_price: 200.00, amount: 800.00 }
   ];
-  
+
   const sampleCustomer = { id: 'customer-123', name: 'Customer Inc', tax_id: 'TAX-123', address: '123 Customer St' };
   const sampleVendor = { id: 'vendor-123', name: 'Vendor Inc', tax_id: 'TAX-456', address: '456 Vendor Ave' };
-  
+
   const formattedResponse = {
     message: "Invoice retrieved successfully",
     data: {
@@ -45,29 +45,30 @@ describe('InvoiceService - getInvoiceById', () => {
       }]
     }
   };
-  
+
   beforeEach(() => {
     // Create mock repositories
     mockInvoiceRepository = {
       findById: jest.fn()
     };
-    
+
     mockItemRepository = {
       findItemsByDocumentId: jest.fn()
     };
-    
+
     mockCustomerRepository = {
       findById: jest.fn()
     };
-    
+
     mockVendorRepository = {
       findById: jest.fn()
     };
-    
+
     mockResponseFormatter = {
-      formatInvoiceResponse: jest.fn()
+      formatInvoiceResponse: jest.fn(),
+      formatStatusResponse: jest.fn() // Add this mock
     };
-    
+
     // Create invoice service with mocked dependencies
     invoiceService = new InvoiceService({
       invoiceRepository: mockInvoiceRepository,
@@ -77,9 +78,8 @@ describe('InvoiceService - getInvoiceById', () => {
       responseFormatter: mockResponseFormatter
     });
   });
-  
   // Positive test cases
-  
+
   test('should return formatted invoice data when invoice exists and is analyzed', (done) => {
     // Arrange
     mockInvoiceRepository.findById.mockResolvedValue(sampleInvoice);
@@ -87,7 +87,7 @@ describe('InvoiceService - getInvoiceById', () => {
     mockCustomerRepository.findById.mockResolvedValue(sampleCustomer);
     mockVendorRepository.findById.mockResolvedValue(sampleVendor);
     mockResponseFormatter.formatInvoiceResponse.mockReturnValue(formattedResponse);
-    
+
     // Act
     invoiceService.getInvoiceById(sampleInvoice.id).subscribe({
       next: (result) => {
@@ -107,7 +107,7 @@ describe('InvoiceService - getInvoiceById', () => {
       }
     });
   });
-  
+
   test('should return formatted invoice data when invoice has no customer or vendor', (done) => {
     // Arrange
     const invoiceWithoutRelations = { ...sampleInvoice, customer_id: null, vendor_id: null };
@@ -115,7 +115,7 @@ describe('InvoiceService - getInvoiceById', () => {
     mockItemRepository.findItemsByDocumentId.mockResolvedValue(sampleItems);
     mockResponseFormatter.formatInvoiceResponse.mockReturnValue({
       ...formattedResponse,
-      data: { 
+      data: {
         documents: [{
           ...formattedResponse.data.documents[0],
           customer: null,
@@ -123,7 +123,7 @@ describe('InvoiceService - getInvoiceById', () => {
         }]
       }
     });
-    
+
     // Act
     invoiceService.getInvoiceById(sampleInvoice.id).subscribe({
       next: (result) => {
@@ -144,13 +144,13 @@ describe('InvoiceService - getInvoiceById', () => {
       }
     });
   });
-  
+
   // Negative test cases
-  
+
   test('should throw NotFoundError when invoice does not exist', (done) => {
     // Arrange
     mockInvoiceRepository.findById.mockResolvedValue(null);
-    
+
     // Act
     invoiceService.getInvoiceById('non-existent-id').subscribe({
       next: () => {
@@ -164,58 +164,94 @@ describe('InvoiceService - getInvoiceById', () => {
       }
     });
   });
-  
+
   test('should return processing message when invoice status is PROCESSING', (done) => {
-    // Arrange
+    // Remove the stray 'e' character
     const processingInvoice = { ...sampleInvoice, status: DocumentStatus.PROCESSING };
     mockInvoiceRepository.findById.mockResolvedValue(processingInvoice);
-    
+
+    // Mock the formatter response
+    mockResponseFormatter.formatStatusResponse.mockReturnValue({
+      message: "Invoice is still being processed. Please try again later.",
+      data: {
+        documents: [],
+        documentUrl: 'https://example.com/invoice.pdf'
+      }
+    });
+
     // Act
     invoiceService.getInvoiceById(processingInvoice.id).subscribe({
       next: (result) => {
         // Assert
         expect(result).toEqual({
           message: "Invoice is still being processed. Please try again later.",
-          data: { documents: [] }
+          data: {
+            documents: [],
+            documentUrl: 'https://example.com/invoice.pdf'
+          }
         });
         expect(mockItemRepository.findItemsByDocumentId).not.toHaveBeenCalled();
+        expect(mockResponseFormatter.formatStatusResponse).toHaveBeenCalledWith(
+          processingInvoice,
+          DocumentStatus.PROCESSING
+        );
         done();
       },
       error: (error) => {
-        done.fail(`Should not have failed with: ${error}`);
+        // Replace done.fail with done(error)
+        done(error);
       }
     });
   });
-  
+
+  // Fix the failed test
   test('should return failed message when invoice status is FAILED', (done) => {
-    // Arrange
+    // Remove the stray 'e' character
     const failedInvoice = { ...sampleInvoice, status: DocumentStatus.FAILED };
     mockInvoiceRepository.findById.mockResolvedValue(failedInvoice);
-    
+
+    // Mock the formatter response
+    mockResponseFormatter.formatStatusResponse.mockReturnValue({
+      message: "Invoice processing failed. Please re-upload the document.",
+      data: {
+        documents: [],
+        documentUrl: 'https://example.com/invoice.pdf'
+      }
+    });
+
     // Act
     invoiceService.getInvoiceById(failedInvoice.id).subscribe({
       next: (result) => {
         // Assert
         expect(result).toEqual({
           message: "Invoice processing failed. Please re-upload the document.",
-          data: { documents: [] }
+          data: {
+            documents: [],
+            documentUrl: 'https://example.com/invoice.pdf'
+          }
         });
         expect(mockItemRepository.findItemsByDocumentId).not.toHaveBeenCalled();
+        expect(mockResponseFormatter.formatStatusResponse).toHaveBeenCalledWith(
+          failedInvoice,
+          DocumentStatus.FAILED
+        );
         done();
       },
       error: (error) => {
-        done.fail(`Should not have failed with: ${error}`);
+        // Replace done.fail with done(error)
+        done(error);
       }
     });
   });
-  
+
+
   // Edge cases
-  
+
   test('should handle errors from repository', (done) => {
     // Arrange
     const expectedError = new Error('Database connection error');
     mockInvoiceRepository.findById.mockRejectedValue(expectedError);
-    
+
     // Act
     invoiceService.getInvoiceById(sampleInvoice.id).subscribe({
       next: () => {
@@ -229,14 +265,14 @@ describe('InvoiceService - getInvoiceById', () => {
       }
     });
   });
-  
+
   test('should handle when customer exists but vendor does not', (done) => {
     // Arrange
     mockInvoiceRepository.findById.mockResolvedValue(sampleInvoice);
     mockItemRepository.findItemsByDocumentId.mockResolvedValue(sampleItems);
     mockCustomerRepository.findById.mockResolvedValue(sampleCustomer);
     mockVendorRepository.findById.mockResolvedValue(null);
-    
+
     const expectedResponse = {
       ...formattedResponse,
       data: {
@@ -246,9 +282,9 @@ describe('InvoiceService - getInvoiceById', () => {
         }]
       }
     };
-    
+
     mockResponseFormatter.formatInvoiceResponse.mockReturnValue(expectedResponse);
-    
+
     // Act
     invoiceService.getInvoiceById(sampleInvoice.id).subscribe({
       next: (result) => {
@@ -262,14 +298,14 @@ describe('InvoiceService - getInvoiceById', () => {
       }
     });
   });
-  
+
   test('should handle when invoice has no items', (done) => {
     // Arrange
     mockInvoiceRepository.findById.mockResolvedValue(sampleInvoice);
     mockItemRepository.findItemsByDocumentId.mockResolvedValue([]);
     mockCustomerRepository.findById.mockResolvedValue(sampleCustomer);
     mockVendorRepository.findById.mockResolvedValue(sampleVendor);
-    
+
     const expectedResponse = {
       ...formattedResponse,
       data: {
@@ -279,9 +315,9 @@ describe('InvoiceService - getInvoiceById', () => {
         }]
       }
     };
-    
+
     mockResponseFormatter.formatInvoiceResponse.mockReturnValue(expectedResponse);
-    
+
     // Act
     invoiceService.getInvoiceById(sampleInvoice.id).subscribe({
       next: (result) => {
