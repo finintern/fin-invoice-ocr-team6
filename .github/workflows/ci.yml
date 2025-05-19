@@ -357,7 +357,7 @@ jobs:
             
             # Check New Relic connection
             echo "Checking New Relic connection..."
-            pm2 logs invoice-ocr-backend-green --lines 20 | grep "New Relic" || echo "No New Relic logs found yet"
+            pm2 logs invoice-ocr-backend-green --lines 20 --nostream | grep "New Relic" || echo "No New Relic logs found yet"
             
             if [ "$GREEN_STATUS" = "\"status\":\"ok\"" ]; then
               echo "✅ Green environment health check passed!"
@@ -438,7 +438,7 @@ jobs:
             
             # Check New Relic connection
             echo "Checking New Relic connection..."
-            pm2 logs invoice-ocr-backend-blue --lines 20 | grep "New Relic" || echo "No New Relic logs found yet"
+            pm2 logs invoice-ocr-backend-blue --lines 20 --nostream | grep "New Relic" || echo "No New Relic logs found yet"
             
             if [ "$BLUE_STATUS" = "\"status\":\"ok\"" ]; then
               echo "✅ Blue environment health check passed!"
