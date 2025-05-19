@@ -1,5 +1,7 @@
 const { InvoiceController } = require("../../src/controllers/invoiceController");
 const pdfValidationService = require("../../src/services/pdfValidationService");
+const DocumentStatus = require('../../src/models/enums/DocumentStatus');
+const rxjs = require('rxjs'); // Import rxjs to fix the 'rxjs is not defined' errors
 
 // Jest-mock-req-res untuk unit test
 const { mockRequest, mockResponse } = require("jest-mock-req-res");
@@ -523,20 +525,28 @@ describe("Invoice Controller", () => {
   });
 
   describe("getInvoiceStatus", () => {
+    // Setup function to wait for observable to complete
+    const waitForObservable = () => {
+      return new Promise(resolve => {
+        setTimeout(resolve, 50);
+      });
+    };
+
     test("should return invoice status when authorized", async () => {
       // Arrange
       const mockStatus = {
         id: "1",
-        status: "ANALYZED"
+        status: DocumentStatus.ANALYZED
       };
       const testData = setupTestData();
       Object.assign(req, testData);
 
       mockInvoiceService.getPartnerId.mockResolvedValue("test-uuid");
-      mockInvoiceService.getInvoiceStatus.mockResolvedValue(mockStatus);
+      mockInvoiceService.getInvoiceStatus.mockReturnValue(rxjs.of(mockStatus));
 
       // Act
-      await controller.getInvoiceStatus(req, res);
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
 
       // Assert
       expect(mockInvoiceService.getPartnerId).toHaveBeenCalledWith("1");
@@ -551,7 +561,8 @@ describe("Invoice Controller", () => {
       Object.assign(req, testData);
 
       // Act
-      await controller.getInvoiceStatus(req, res);
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
 
       // Assert
       expect(res.status).toHaveBeenCalledWith(401);
@@ -567,7 +578,8 @@ describe("Invoice Controller", () => {
       Object.assign(req, testData);
 
       // Act
-      await controller.getInvoiceStatus(req, res);
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
 
       // Assert
       expect(res.status).toHaveBeenCalledWith(400);
@@ -585,7 +597,8 @@ describe("Invoice Controller", () => {
       mockInvoiceService.getPartnerId.mockResolvedValue("other-uuid");
 
       // Act
-      await controller.getInvoiceStatus(req, res);
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
 
       // Assert
       expect(res.status).toHaveBeenCalledWith(403);
@@ -601,11 +614,12 @@ describe("Invoice Controller", () => {
       Object.assign(req, testData);
 
       mockInvoiceService.getPartnerId.mockResolvedValue("test-uuid");
-      // Use NotFoundError instead of generic Error
-      mockInvoiceService.getInvoiceStatus.mockRejectedValue(new NotFoundError("Invoice not found"));
+      // Simulate observable that emits error for not found
+      mockInvoiceService.getInvoiceStatus.mockReturnValue(rxjs.throwError(() => new NotFoundError("Invoice not found")));
 
       // Act
-      await controller.getInvoiceStatus(req, res);
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
 
       // Assert
       expect(res.status).toHaveBeenCalledWith(404);
@@ -614,5 +628,24 @@ describe("Invoice Controller", () => {
       });
     });
 
+    test("should handle general service errors", async () => {
+      // Arrange
+      const testData = setupTestData();
+      Object.assign(req, testData);
+
+      mockInvoiceService.getPartnerId.mockResolvedValue("test-uuid");
+      // Simulate observable that emits a general error
+      mockInvoiceService.getInvoiceStatus.mockReturnValue(rxjs.throwError(() => new Error("Service error")));
+
+      // Act
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Internal server error"
+      });
+    });
   });
 });
