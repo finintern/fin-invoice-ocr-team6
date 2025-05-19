@@ -268,7 +268,7 @@ describe('PurchaseOrderResponseFormatter', () => {
       test('should throw error when status is not processing or failed', () => {
         expect(() => {
           formatter.formatStatusResponse(purchaseOrder, 'invalid_status');
-        }).toThrowError('Invalid document status');
+        }).toThrowError('Unknown status invalid_status');
       });
     });
   });
