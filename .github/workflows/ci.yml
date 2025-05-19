@@ -357,7 +357,7 @@ jobs:
             
             # Check New Relic connection
             echo "Checking New Relic connection..."
-            pm2 logs invoice-ocr-backend-green --lines 20 --nostream | grep "New Relic" || echo "No New Relic logs found yet"
+            pm2 logs invoice-ocr-backend-green --lines 20 | grep "New Relic" || echo "No New Relic logs found yet"
             
             if [ "$GREEN_STATUS" = "\"status\":\"ok\"" ]; then
               echo "✅ Green environment health check passed!"
@@ -371,11 +371,100 @@ jobs:
       - name: Notify Discord (Green Deploy Failed)
         if: steps.verify-green.outcome == 'failure'
         run: |
-          curl -H "Content-Type: application/json" \
-              -X POST \
-              -d "{\"content\": \"❌ *Deploy Green gagal* di branch \`${{ github.ref_name }}\` oleh \`${{ github.actor }}\`\"}" \
-              ${{ secrets.DISCORD_WEBHOOK }}
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Get latest version ID from green environment
+            VERSION_ID=$(cat ~/fin-invoice-ocr-team6/environments/green/current/release.json | grep -o "\"version\":[^,]*" | cut -d":" -f2 | tr -d "\"" | tr -d " ")
+            
+            echo "Deploying version $VERSION_ID to Blue environment (port 3000) with New Relic"
+            
+            # Deploy to Blue environment (port 3000)
+            # Copy from release to blue environment
+            rm -rf ~/fin-invoice-ocr-team6/environments/blue/current/*
+            cp -R ~/fin-invoice-ocr-team6/releases/$VERSION_ID/* ~/fin-invoice-ocr-team6/environments/blue/current/
+            
+            # Set up symlinks
+            cd ~/fin-invoice-ocr-team6/environments/blue/current/backend
+            ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            ln -sf ~/fin-invoice-ocr-team6/shared/newrelic.js ./newrelic.js
+            ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
+            
+            # Update current symlink to point to the new release
+            ln -sfn ~/fin-invoice-ocr-team6/releases/$VERSION_ID ~/fin-invoice-ocr-team6/current
+            
+            # Stop and start Blue environment with New Relic
+            pm2 stop invoice-ocr-backend-blue || true
+            pm2 delete invoice-ocr-backend-blue || true
+            
+            # Start with New Relic integration
+            PORT=3000 \
+            NEW_RELIC_ENABLED=true \
+            NEW_RELIC_APP_NAME=invoice-ocr-backend-blue \
+            NEW_RELIC_LICENSE_KEY=$(grep NEW_RELIC_LICENSE_KEY .env | cut -d"=" -f2) \
+            DEPLOYMENT_COLOR=blue \
+            pm2 start server.js --name invoice-ocr-backend-blue --node-args="-r newrelic"
+            
+            # Also start the default app with New Relic (for backwards compatibility)
+            pm2 stop invoice-ocr-backend || true
+            pm2 delete invoice-ocr-backend || true
+            
+            PORT=3000 \
+            NEW_RELIC_ENABLED=true \
+            NEW_RELIC_APP_NAME=invoice-ocr-backend \
+            NEW_RELIC_LICENSE_KEY=$(grep NEW_RELIC_LICENSE_KEY .env | cut -d"=" -f2) \
+            DEPLOYMENT_COLOR=blue \
+            pm2 start server.js --name invoice-ocr-backend --node-args="-r newrelic"
+            
+            pm2 save
+            
+            echo "Deployed to Blue environment (port 3000) with New Relic monitoring"
+            pm2 list | grep invoice
+            
+            # Cleanup old releases (keep only the last 5)
+            cd ~/fin-invoice-ocr-team6/releases
+            ls -td */ | tail -n +6 | xargs rm -rf 2>/dev/null || true
+          '
 
+      - name: Verify Blue Deployment
+        run: |
+          # Wait for application to start
+          sleep 5
+          
+          # Check Blue health endpoint
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Testing Blue environment health endpoint..."
+            BLUE_HEALTH=$(curl -s http://localhost:3000/health)
+            echo "Blue health check response: $BLUE_HEALTH"
+            BLUE_STATUS=$(echo $BLUE_HEALTH | grep -o "\"status\":\"ok\"" || echo "failed")
+            
+            # Check New Relic connection
+            echo "Checking New Relic connection..."
+            pm2 logs invoice-ocr-backend-blue --lines 20 | grep "New Relic" || echo "No New Relic logs found yet"
+            
+            if [ "$BLUE_STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Blue environment health check passed!"
+              echo "✅ Deployment completed successfully to both Green and Blue environments with New Relic monitoring."
+            else
+              echo "❌ Blue environment health check failed!"
+              echo "⚠️ Warning: Green environment is working but Blue failed. Traffic is still going to Blue."
+              exit 1
+            fi
+          '
+          
+      - name: Notify New Relic of Deployment
+        if: success()
+        run: |
+          curl -X POST "https://api.newrelic.com/v2/applications/deployment.json" \
+            -H "X-Api-Key: ${{ secrets.NEW_RELIC_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "deployment": {
+                "revision": "${{ env.VERSION }}",
+                "changelog": "Deployment via GitHub Actions CI/CD",
+                "description": "Blue/Green Deployment",
+                "user": "${{ github.actor }}"
+              }
+            }'
+          
   functional-test:
     name: Run Functional Tests on Green Environment
     runs-on: ubuntu-latest
