@@ -529,3 +529,193 @@ Untuk menjaga agar dokumentasi API terorganisir dengan baik, gunakan tag-tag ber
 - `Purchase Orders`: Untuk endpoint terkait purchase order
 
 </details>
+
+<details>
+  <summary><strong>Tutorial Monitoring dan Alert dengan Sentry</strong></summary>
+
+## Tutorial: Monitoring dan Alert dengan Sentry
+
+Tutorial ini menjelaskan cara menggunakan Sentry untuk monitoring aplikasi dan mengatur alert untuk mendeteksi masalah pada layanan eksternal seperti Amazon S3.
+
+### 1. Persiapan dan Instalasi
+
+#### 1.1 Membuat Akun Sentry
+
+1. Kunjungi [sentry.io](https://sentry.io) dan buat akun baru, atau login jika sudah memiliki akun
+2. Buat project baru di Sentry, pilih platform Node.js
+3. Catat DSN (Data Source Name) yang diberikan setelah project dibuat
+
+#### 1.2 Instalasi Sentry SDK
+
+Install Sentry SDK di aplikasi Node.js:
+
+```bash
+npm install @sentry/node @sentry/tracing
+```
+
+### 2. Konfigurasi Dasar Sentry
+
+Tambahkan konfigurasi berikut di file `app.js` atau file inisialisasi aplikasi:
+
+```javascript
+const Sentry = require('@sentry/node');
+const Tracing = require('@sentry/tracing');
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN, // Simpan di .env
+  integrations: [
+    new Sentry.Integrations.Http({ tracing: true }), 
+    new Tracing.Integrations.Express({ app })
+  ],
+  tracesSampleRate: 1.0, // Sampel 100% untuk lingkungan development (kurangi untuk production)
+  environment: process.env.NODE_ENV || 'development'
+});
+
+// Middleware Sentry harus menjadi middleware pertama
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
+
+// Routing aplikasi
+// ...
+
+// Error handler Sentry harus berada sebelum error handler lainnya
+app.use(Sentry.Handlers.errorHandler());
+```
+
+### 3. Monitoring Layanan AWS S3
+
+Untuk monitoring layanan S3, modifikasi service S3 agar mengirimkan error ke Sentry:
+
+```javascript
+const AWS = require("aws-sdk");
+const { v4: uuidv4 } = require('uuid');
+const Sentry = require('@sentry/node');
+
+class s3Service {
+    constructor() {
+        this.s3 = new AWS.S3({
+            region: process.env.AWS_REGION,
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        });
+        this.bucketName = process.env.AWS_BUCKET_NAME;
+    }
+
+    /**
+     * Upload a file to S3
+     * @param {Buffer} fileBuffer - File content as a buffer 
+     * @returns {Promise<string>} - Resolves to the uploaded file URL
+     */
+    async uploadFile(fileBuffer) {
+        const fileName = `${uuidv4()}.pdf`;
+        const params = {
+            Bucket: this.bucketName,
+            Key: fileName,
+            Body: fileBuffer,        
+        };
+
+        try {
+            const data = await this.s3.upload(params).promise();
+            return data.Location;
+        } catch (error) {
+            // Tangkap error dan kirim ke Sentry dengan konteks
+            Sentry.withScope(scope => {
+                scope.setTag('service', 's3');
+                scope.setTag('operation', 'uploadFile');
+                scope.setContext('s3_parameters', {
+                    bucket: this.bucketName,
+                    fileName: fileName
+                });
+                Sentry.captureException(error);
+            });
+            console.error("S3 Upload Error:", error);
+            throw error;
+        }
+    }
+
+    // Metode lainnya...
+}
+
+module.exports = new s3Service();
+```
+
+### 4. Membuat Custom Alert di Sentry
+
+#### 4.1 Alerts untuk Error S3
+
+1. Login ke dashboard Sentry
+2. Pilih project yang telah dibuat
+3. Klik menu "Alerts" di sidebar
+4. Klik tombol "Create Alert Rule"
+5. Pilih "Issues" sebagai tipe alert
+6. Pada bagian "When", atur kondisi:
+   - Set filter: `tag:service s3`
+   - Pilih "The issue is first seen"
+7. Pada bagian "Actions", tambahkan action notifikasi:
+   - Pilih channel notifikasi (email, Slack, PagerDuty, dsb)
+   - Atur subjek, misalnya: "ALERT: S3 Service Issue Detected"
+8. Atur severity level dan simpan alert rule
+
+#### 4.2 Alert untuk Error Rate Tinggi
+
+1. Di menu "Create Alert Rule", pilih "Metrics" sebagai tipe alert
+2. Pilih "Error Rate"
+3. Atur kondisi, misalnya: "error rate > 5%"
+4. Tambahkan filter untuk hanya memonitor service S3:
+   - `tag:service:s3` 
+5. Atur action notifikasi dan simpan
+
+### 5. Implementasi Health Check
+
+Buat endpoint health check untuk memeriksa status S3:
+
+```javascript
+// routes/healthcheck.js
+const express = require('express');
+const router = express.Router();
+const s3Service = require('../services/s3Service');
+const Sentry = require('@sentry/node');
+
+router.get('/health/s3', async (req, res) => {
+  try {
+    // Coba akses S3 dengan operasi ringan
+    await s3Service.s3.headBucket({ Bucket: s3Service.bucketName }).promise();
+    
+    return res.status(200).json({
+      status: 'healthy',
+      service: 's3',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    // Catat error di Sentry
+    Sentry.withScope(scope => {
+      scope.setTag('service', 's3');
+      scope.setTag('check_type', 'health_check');
+      Sentry.captureException(error);
+    });
+    
+    return res.status(503).json({
+      status: 'unhealthy',
+      service: 's3',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+module.exports = router;
+```
+
+### 6. Tips Monitoring yang Efektif
+
+- **Kategorisasi Error**: Gunakan tag untuk mengkategorikan error (misalnya 'service', 'operation', dsb)
+- **Cakupan yang Tepat**: Pastikan hanya error yang benar-benar penting yang memicu alert
+- **Priotitas Alert**: Atur level severity yang sesuai agar tim tidak mengalami alert fatigue
+- **Context yang Cukup**: Sertakan informasi kontekstual yang memadai dalam setiap error
+- **Fallback Plan**: Buat strategi fallback untuk menangani layanan yang down (misalnya S3 down)
+- **Pemantauan Bertingkat**:
+  - Warning: Untuk masalah minor, tidak perlu notifikasi darurat
+  - Error: Untuk masalah yang memerlukan penanganan segera tapi tidak kritis
+  - Critical: Untuk masalah yang menyebabkan downtime atau penurunan layanan secara signifikan
+
+</details>
