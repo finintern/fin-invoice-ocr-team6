@@ -3,7 +3,7 @@ const FinancialDocumentController = require('./financialDocumentController');
 const Sentry = require("../instrument");
 const { ValidationError, AuthError, ForbiddenError, NotFoundError } = require('../utils/errors');
 const { from, of, throwError } = require('rxjs');
-const { catchError, mergeMap, tap } = require('rxjs/operators');
+const { catchError, mergeMap, tap, switchMap } = require('rxjs/operators');
 const validateDeletionService = require('../services/validateDeletion');
 const s3Service = require('../services/s3Service');
 const PurchaseOrderLogger = require('../services/purchaseOrder/purchaseOrderLogger');
@@ -90,16 +90,32 @@ class PurchaseOrderController extends FinancialDocumentController {
    * 
    * @param {Object} req - Express request object
    * @param {Object} res - Express response object
-   * @returns {Promise<Object>} JSON with purchase order ID and status
    */
   async getPurchaseOrderStatus(req, res) {
     try {
       const { id } = req.params;
+      
+      // Add initial breadcrumb for request tracking
+      Sentry.addBreadcrumb({
+        category: "purchaseOrderStatus",
+        message: `Status request received for purchase order ${id}`,
+        level: "info",
+        data: { 
+          purchaseOrderId: id,
+          user: req.user?.uuid 
+        }
+      });
+      
+      // Validate the request
       await this.validateGetRequest(req, id);
       
+      // Get the status (returns a Promise for backward compatibility)
       const statusResult = await this.purchaseOrderService.getPurchaseOrderStatus(id);
+      
+      // Return the result
       return res.status(200).json(statusResult);
     } catch (error) {
+      // Use the existing error handler
       return this.handleError(res, error);
     }
   }
