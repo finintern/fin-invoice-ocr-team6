@@ -1,3 +1,5 @@
+const { test } = require('../../../src/database/config');
+const { describe } = require('../../../src/models/base/financialDocument');
 const DocumentStatus = require('../../../src/models/enums/DocumentStatus');
 const PurchaseOrderResponseFormatter = require('../../../src/services/purchaseOrder/purchaseOrderResponseFormatter');
 
@@ -265,10 +267,38 @@ describe('PurchaseOrderResponseFormatter', () => {
     }); 
     
     describe('negative cases', () => {
-      test('should throw error when status is not processing or failed', () => {
+      test('should throw error when purchaseOrder is not provided', () => {
+        expect(() => {
+          formatter.formatStatusResponse(null, DocumentStatus.FAILED); 
+        }).toThrowError(); 
+      })
+
+      test('should throw error when purchaseOrder provided does not have file_url attribute', () => {
+        const fakePurchaseOrder = {fakeAttribute:null}; 
+        expect(() => {
+          formatter.formatStatusResponse(fakePurchaseOrder, DocumentStatus.FAILED); 
+        })
+      })
+
+      test('should throw error when status is not provided', () => {
+        expect(() => {
+          formatter.formatStatusResponse(purchaseOrder, undefined);
+        }).toThrowError('Invalid status undefined');
+      });
+
+      test('should throw error when status is provided but not valid', () => {
         expect(() => {
           formatter.formatStatusResponse(purchaseOrder, 'invalid_status');
-        }).toThrowError('Unknown status invalid_status');
+        }).toThrowError('Invalid status invalid_status');
+      });
+
+    });
+
+    describe('corner cases', () => {
+      test('should throw error when status is Analyzed and show warning that analyzed document should be called with formatPurchaseOrderResponse instead', () => {
+        expect(() => {
+          formatter.formatStatusResponse(purchaseOrder, DocumentStatus.ANALYZED);
+        }).toThrowError(`Invalid status ${DocumentStatus.ANALYZED}. Use formatPurchaseOrderResponse instead.`);
       });
     });
   });
