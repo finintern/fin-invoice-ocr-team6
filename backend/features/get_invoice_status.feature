@@ -1,31 +1,44 @@
-Feature: Get Invoice By ID
+@getInvoiceStatus
+Feature: Get Invoice Status
   As a partner
-  I want to retrieve an invoice by its ID
-  So that I can view the details of a specific invoice
+  I want to check the status of my invoice
+  So that I can know whether it has been processed successfully
 
   Background:
-    Given a valid authenticated user
+    Given a valid authenticated user for invoice status
 
-  Scenario: Successfully retrieve an existing invoice
-    Given an invoice "invoice-123" exists and belongs to the user
-    When the user requests invoice with ID "invoice-123"
-    Then the response status should be 200
-    And the response should contain the invoice details
+  Scenario: Successfully get the status of an analyzed invoice
+    Given an invoice "inv-123" exists with "Analyzed" status
+    When the user requests status for invoice "inv-123"
+    Then the response status for invoice should be 200
+    And the response should contain invoice "inv-123" with status "Analyzed"
 
-  Scenario: Attempt to retrieve a non-existent invoice
-    Given the invoice "invalid-id" does not exist
-    When the user requests invoice with ID "invalid-id"
-    Then the response status should be 404
-    And the response message should be "Invoice not found"
+  Scenario: Successfully get the status of a processing invoice
+    Given an invoice "inv-456" exists with "Processing" status
+    When the user requests status for invoice "inv-456"
+    Then the response status for invoice should be 200
+    And the response should contain invoice "inv-456" with status "Processing"
 
-  Scenario: Attempt to retrieve an invoice belonging to another user
-    Given the invoice "other-user-invoice" belongs to another user
-    When the user requests invoice with ID "other-user-invoice"
-    Then the response status should be 403
-    And the response message should be "Unauthorized: You do not own this invoice"
+  Scenario: Successfully get the status of a failed invoice
+    Given an invoice "inv-789" exists with "Failed" status
+    When the user requests status for invoice "inv-789"
+    Then the response status for invoice should be 200
+    And the response should contain invoice "inv-789" with status "Failed"
 
-  Scenario: Attempt to retrieve an invoice when not authenticated
-    Given the user is not authenticated
-    When the user requests invoice with ID "invoice-123"
-    Then the response status should be 401
-    And the response message should be "Unauthorized"
+  Scenario: Attempt to get the status of a non-existent invoice
+    Given the invoice "invalid-id" does not exist for status
+    When the user requests status for invoice "invalid-id"
+    Then the response status for invoice should be 404
+    And the response message for invoice should be "Invoice not found"
+
+  Scenario: Attempt to get the status of an invoice belonging to another user
+    Given the invoice "other-user-inv" belongs to another user for status
+    When the user requests status for invoice "other-user-inv"
+    Then the response status for invoice should be 403
+    And the response message for invoice should be "Forbidden: You do not have access to this invoice"
+
+  Scenario: Attempt to get the status without authentication
+    Given an unauthenticated user for invoice status
+    When the user requests status for invoice "inv-123"
+    Then the response status for invoice should be 401
+    And the response message for invoice should be "Unauthorized: Missing credentials"
