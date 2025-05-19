@@ -1,6 +1,4 @@
 {
-  "message": "Document processed successfully",
-  "data": {
     "apiVersion": "2023-07-31",
     "modelId": "prebuilt-invoice",
     "content": "INVOICE\nInvoice Number\nINV-0013\nInvoice Date\n1/12/1987\nBilling Information\nShipping Information\nCompany\nName\nQuisque porta volutpat erat. Quisque erat\nBobbe Rafter\neros, viverra eget, congue eget, semper\nrutrum, nulla. Nunc purus.\nAddress\nName\n9 Glendale Court, 72240 Namekagon Parkway\nBobbe Rafter\nNashville, Tennessee, 37205\nUnited States\nAddress\n9 Glendale Court, 72240 Namekagon Parkway\nNashville, Tennessee, 37205\nUnited States\nEmail\ncfiloniere1@reuters.com\nProducts\nDescription\nQuantity\nUnit\nPrice\nBeef - Baby, Liver\n$23.00\n1\n$23.00\nTarragon - Fresh\n$29.00\n1\n$29.00\nTotal\n$52.00\nAdditional Notes\nSuspendisse potenti. Nullam porttitor lacus at turpis.\nTERMS AND CONDITIONS\n1. The Seller shall not be liable to the Buyer directly or indirectly for any loss or damage suffered by the Buyer.\n2. The Seller warrants the product for one (1) year from the date of shipment.\nFor any questions, please contact our billing department at billing@example.com or (123) 456-7890.\nACME Company | www.example.com\nJotform\nNow create your own Jotform PDF document - It's Free Create your own PDF Document\n3. Any purchase order received by the seller will be interpreted as accepting this offer and the sale offer in writing. The buyer may purchase\nthe product in this offer only under the Terms and Conditions of the SelIer included in this offer.\nFor any questions, please contact our billing department at billing@example.com or (123) 456-7890.\nACME Company | www.example.com\nY Jotform\nNow create your own Jotform PDF document - It's Free Create your own PDF Document",
@@ -8802,5 +8800,4 @@
         "confidence": 1
       }
     ]
-  }
 }
