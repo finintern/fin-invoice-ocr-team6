@@ -1,102 +1,41 @@
-const PdfDecryptionStrategy = require('./pdfDecryptionStrategy');
+const PDFDecryptionStrategy = require('./pdfDecryptionStrategy');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const { spawn } = require('child_process');
-const DecryptLogger = require('../services/decryptLoggerAdapter');
-const Sentry = require("../instrument");
+const { exec } = require('child_process');
 
-class QpdfDecryption extends PdfDecryptionStrategy {
+class qpdfDecryption extends PDFDecryptionStrategy {
     constructor() {
         super();
-        this._qpdfAvailabilityPromise = null;
+        this.isQpdfAvailable = false;
+        this.checkQpdfAvailability();
     }
 
-    _checkQpdfInPath() {
-        return new Promise((resolve, reject) => {                     
-            const envPath = process.env.QPDF_PATH;
-            if (envPath && fs.existsSync(envPath)) {
-                DecryptLogger.logDecryptionAvailability('QPDF', true);
-                return resolve(envPath);
-            }  
-            DecryptLogger.logDecryptionAvailability('QPDF', false);
-            reject(new Error('QPDF not found in PATH.'));
+    checkQpdfAvailability() {
+        exec('qpdf --version', (error) => {
+            this.isQpdfAvailable = !error;
+            if (!this.isQpdfAvailable) {
+                console.warn('QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.');
+            }
         });
     }
 
-    _checkQpdfVersion(qpdfPath) {
-        return new Promise((resolve, reject) => {
-            const process = spawn(qpdfPath, ['--version']);
-            
-            process.on('error', (error) => {
-                DecryptLogger.logDecryptionError(0, error, 'QPDF');
-                reject(error);
-            });
-            
-            process.on('close', (code) => {
-                if (code !== 0) {
-                    const error = new Error('Failed to verify qpdf version');
-                    DecryptLogger.logDecryptionError(0, error, 'QPDF');
-                    return reject(error);
-                }
-                DecryptLogger.logDecryptionAvailability('QPDF', true);
-                resolve();
-            });
-        });
-    }
-
-    async checkQpdfAvailability() {
-        if (await this._qpdfAvailabilityPromise) {
-            return this._qpdfAvailabilityPromise;
-        }
-        
-        this._qpdfAvailabilityPromise = new Promise((resolve) => {
-            this._checkQpdfInPath()
-                .then(qpdfPath => this._checkQpdfVersion(qpdfPath))
-                .then(() => resolve(true))
-                // eslint-disable-next-line no-unused-vars
-                .catch(_error => {                    
-                    console.warn('QPDF is not installed or not in PATH. PDF decryption will not work until qpdf is installed.');
-                    Sentry.addBreadcrumb({
-                        category: 'pdf-decryption',
-                        message: 'QPDF is not installed or not in PATH',
-                        level: 'warning'
-                    });
-                    resolve(false);
-                });
-        });
-        
-        return this._qpdfAvailabilityPromise;
-    }
-
-    async execCommand(command, args) {
-        const isAvailable = await this.checkQpdfAvailability();
-        
-        if (!isAvailable) {
-            const error = new Error(
+    async execCommand(command) {
+        // Check if qpdf is available before executing the command
+        if (!this.isQpdfAvailable) {
+            throw new Error(
                 'QPDF is not installed. Please install QPDF to decrypt PDF files.\n' +
                 'Windows: Install from https://qpdf.sourceforge.io/ or using Chocolatey: choco install qpdf\n' +
                 'Linux: sudo apt-get install qpdf\n' +
                 'MacOS: brew install qpdf'
             );
-            DecryptLogger.logDecryptionError(0, error, 'QPDF');
-            throw error;
         }
 
         return new Promise((resolve, reject) => {
-            const process = spawn(command, args);
-    
-            let stderr = '';
-            process.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
-    
-            process.on('close', (code) => {
-                if (code !== 0) {
-                    const error = new Error(`Failed to decrypt PDF: ${stderr.trim()}`);
-                    DecryptLogger.logDecryptionError(0, error, 'QPDF');
-                    reject(error);
+            exec(command, (error, stdout, stderr) => {
+                if (error) {
+                    reject(new Error(`Failed to decrypt PDF: ${stderr.trim()}`));
                 } else {
                     resolve();
                 }
@@ -106,13 +45,9 @@ class QpdfDecryption extends PdfDecryptionStrategy {
 
     async decrypt(pdfBuffer, password) {
         if (!Buffer.isBuffer(pdfBuffer)) {
-            const error = new Error('Invalid input: Expected a Buffer.');
-            DecryptLogger.logDecryptionError(0, error, 'QPDF');
-            throw error;
+            throw new Error('Invalid input: Expected a Buffer.');
         }
-        
-        const startTime = Date.now();
-        const fileSize = pdfBuffer.length;
+
         let tempDir = null;
         let inputPath = null;
         let outputPath = null;
@@ -126,44 +61,21 @@ class QpdfDecryption extends PdfDecryptionStrategy {
 
             fs.writeFileSync(inputPath, pdfBuffer);
 
-            DecryptLogger.logDecryptionStart(fileSize, 'QPDF decrypt');
-            Sentry.addBreadcrumb({
-                category: 'pdf-decryption',
-                message: `Decrypting PDF with size ${fileSize} bytes using QPDF`,
-                level: 'info'
-            });
-
-            await this.execCommand('qpdf', [
-                `--password=${password}`,
-                '--decrypt',
-                inputPath,
-                outputPath
-            ]);            
+            const command = `qpdf --password=${password} --decrypt "${inputPath}" "${outputPath}"`;
+            await this.execCommand(command);
 
             if (!fs.existsSync(outputPath)) {
-                const error = new Error('Failed to decrypt PDF: Output file not created.');
-                DecryptLogger.logDecryptionError(fileSize, error, 'QPDF');
-                throw error;
+                throw new Error('Failed to decrypt PDF: Output file not created.');
             }
 
             const decryptedPdf = fs.readFileSync(outputPath);
-            const processTime = Date.now() - startTime;
-            DecryptLogger.logDecryptionSuccess(fileSize, processTime, 'QPDF');
-            
             return decryptedPdf;
         } catch (error) {
-            const processTime = Date.now() - startTime;
-            
             if (error.message.toLowerCase().includes('password')) {
-                const passwordError = new Error('Failed to decrypt PDF: Incorrect password.');
-                DecryptLogger.logDecryptionError(fileSize, passwordError, 'QPDF', processTime);
-                throw passwordError;
+                throw new Error('Failed to decrypt PDF: Incorrect password.');
             } else if (error.message.includes('PDF header') || error.message.includes('not a PDF')) {
-                const corruptedError = new Error('Failed to decrypt PDF: Corrupted file.');
-                DecryptLogger.logDecryptionError(fileSize, corruptedError, 'QPDF', processTime);
-                throw corruptedError;
+                throw new Error('Failed to decrypt PDF: Corrupted file.');
             } else {
-                DecryptLogger.logDecryptionError(fileSize, error, 'QPDF', processTime);
                 throw error;  
             }
         } finally {
@@ -182,11 +94,10 @@ class QpdfDecryption extends PdfDecryptionStrategy {
                     }
                 } catch (cleanupError) {
                     console.warn(`Cleanup failed for ${filePath}: ${cleanupError.message}`);
-                    DecryptLogger.logDecryptionError(0, cleanupError, 'QPDF-Cleanup');
                 }
             }
         }
     }
 }
 
-module.exports = QpdfDecryption;
+module.exports = qpdfDecryption;
