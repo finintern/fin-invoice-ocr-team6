@@ -98,8 +98,8 @@ const mockGetPurchaseOrderById = async (req, res) => {
           {
             header: {
               purchase_order_details: {
-                purchase_order_id: mappedData.purchaseOrderData.po_number,
-                due_date: purchaseOrderDate.toISOString(),
+                purchase_order_id: purchaseOrderDate.toISOString(),
+                due_date: dueDate.toISOString(),
                 payment_terms: mappedData.purchaseOrderData.payment_terms
               },
               vendor_details: {
@@ -141,7 +141,7 @@ const mockGetPurchaseOrderById = async (req, res) => {
     // Log the mock request
     console.log(`[SANDBOX] Mock get purchase order details for ID: ${id}`);
 
-    return res.status(200).json(mappedData);
+    return res.status(200).json(response);
   } catch (error) {
     console.error("[SANDBOX] Error in mock get purchase order details:", error);
     return res.status(500).json({

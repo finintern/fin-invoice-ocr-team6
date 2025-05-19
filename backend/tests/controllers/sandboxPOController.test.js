@@ -209,13 +209,18 @@ describe("Sandbox Controller", () => {
       }));
 
       // Act: Call the controller method
-      await sandboxController.mockGetPurchaseOrderById(req, res);
-
-      // Assert: Check the response
+      await sandboxController.mockGetPurchaseOrderById(req, res);      // Assert: Check the response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-        purchaseOrderData: expect.objectContaining({
-          po_number: 'PO-12345'
+        data: expect.objectContaining({
+          documents: expect.arrayContaining([
+            expect.objectContaining({
+              header: expect.objectContaining({
+                purchase_order_details: expect.any(Object)
+              })
+            })
+          ]),
+          documentUrl: "https://mock-s3-url.com/purchase-order.pdf"
         })
       }));
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining("[SANDBOX] Mock get purchase order details for ID"));
