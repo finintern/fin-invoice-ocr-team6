@@ -240,7 +240,7 @@ jobs:
             
             # Install dependencies and build in release directory
             cd backend
-            npm ci --staging
+            npm ci --production
             
             # Create symbolic link to shared .env file
             ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
