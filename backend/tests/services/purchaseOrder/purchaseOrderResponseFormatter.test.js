@@ -1,5 +1,3 @@
-const { test } = require('../../../src/database/config');
-const { describe } = require('../../../src/models/base/financialDocument');
 const DocumentStatus = require('../../../src/models/enums/DocumentStatus');
 const PurchaseOrderResponseFormatter = require('../../../src/services/purchaseOrder/purchaseOrderResponseFormatter');
 
@@ -253,7 +251,10 @@ describe('PurchaseOrderResponseFormatter', () => {
         const result = formatter.formatStatusResponse(purchaseOrder, DocumentStatus.PROCESSING);
         expect(result).toEqual({
           message: "Purchase Order is still being processed. Please try again later.",
-          documentUrl: purchaseOrder.file_url
+          data: {
+            documents: [], 
+            documentUrl: purchaseOrder.file_url
+          }
         });
       });
 
@@ -261,7 +262,10 @@ describe('PurchaseOrderResponseFormatter', () => {
         const result = formatter.formatStatusResponse(purchaseOrder, DocumentStatus.FAILED);
         expect(result).toEqual({
           message: "Purchase Order processing failed. Please re-upload the document.",
-          documentUrl: purchaseOrder.file_url
+          data: {
+            documents: [], 
+            documentUrl: purchaseOrder.file_url
+          }
         });
       });
     }); 
@@ -277,7 +281,7 @@ describe('PurchaseOrderResponseFormatter', () => {
         const fakePurchaseOrder = {fakeAttribute:null}; 
         expect(() => {
           formatter.formatStatusResponse(fakePurchaseOrder, DocumentStatus.FAILED); 
-        })
+        }).toThrowError('purchaseOrder.file_url is not provided')
       })
 
       test('should throw error when status is not provided', () => {
