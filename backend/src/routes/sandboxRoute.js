@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const uploadMiddleware = require('../middlewares/uploadMiddleware');
-const sandboxController = require('../controllers/sandboxController');
+const sandboxController = require('../controllers/sandboxPOController');
 const sandboxInvoiceController = require('../controllers/sandboxInvoiceController');
 
 /**
