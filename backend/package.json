@@ -48,7 +48,9 @@
     "pdfjs-dist": "^3.11.174",
     "sinon": "^20.0.0",
     "sqlite3": "^5.1.7",
-    "supertest": "^7.1.0"
+    "supertest": "^7.1.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "jest": {
     "collectCoverage": true,
