@@ -334,35 +334,32 @@ class InvoiceService extends FinancialDocumentService {
   }
   
     
-  async getInvoiceStatus(invoiceId) {
-    try {
-      const invoice = await this.invoiceRepository.findById(invoiceId);
+  getInvoiceStatus(invoiceId) {
+    return from(this.invoiceRepository.findById(invoiceId)).pipe(
+      switchMap((invoice) => {
+        if (!invoice) {
+          this.logger.logStatusNotFound?.(invoiceId);
+          return throwError(() => new NotFoundError("Invoice not found"));
+        }
 
-      if (!invoice) {
-        this.logger.logStatusNotFound?.(invoiceId);
-        throw new NotFoundError("Invoice not found");
-      }
+        this.logger.logStatusRequest?.(invoiceId, invoice.status);
 
-      const status = {
-        id: invoice.id,
-        status: invoice.status
-      };
-      
-      // Log successful status request
-      this.logger.logStatusRequest?.(invoiceId, invoice.status);
+        return of({
+          id: invoice.id,
+          status: invoice.status
+        });
+      }),
+      catchError((error) => {
+        if (error instanceof NotFoundError) {
+          return throwError(() => error);
+        }
 
-      return status;
-    } catch (error) {
-      if (error instanceof NotFoundError) {
-        throw error;
-      }
-      
-      // Log error during status retrieval
-      this.logger.logStatusError?.(invoiceId, error);
-      Sentry.captureException(error);
-      console.error("Error getting invoice status:", error);
-      throw new Error(`Failed to get invoice status: ${error.message}`);
-    }
+        this.logger.logStatusError?.(invoiceId, error);
+        Sentry.captureException(error);
+        console.error("Error getting invoice status:", error);
+        return throwError(() => new Error(`Failed to get invoice status: ${error.message}`));
+      })
+    );
   }
 
   async analyzeInvoice(documentUrl) {
