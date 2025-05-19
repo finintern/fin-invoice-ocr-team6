@@ -195,6 +195,8 @@ jobs:
           echo "DSN=${{ secrets.DSN }}" >> .env
           echo "NEW_RELIC_LICENSE_KEY=${{ secrets.NEW_RELIC_LICENSE_KEY }}" >> .env
           echo "NEW_RELIC_ENABLED=true" >> .env
+          echo "NEW_RELIC_LICENSE_KEY=${{ secrets.NEW_RELIC_LICENSE_KEY }}" >> .env
+          echo "NEW_RELIC_ENABLED=true" >> .env
 
       - name: Setup Directory Structure
         run: |
@@ -239,41 +241,6 @@ jobs:
         run: |
           scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
 
-      - name: Create New Relic Configuration
-        run: |
-          # Create newrelic.js configuration
-          cat > newrelic.js << 'EOF'
-          'use strict'
-          exports.config = {
-            app_name: [process.env.NEW_RELIC_APP_NAME || 'invoice-ocr-backend'],
-            license_key: process.env.NEW_RELIC_LICENSE_KEY,
-            logging: {
-              level: 'info'
-            },
-            allow_all_headers: true,
-            distributed_tracing: {
-              enabled: true
-            },
-            attributes: {
-              exclude: [
-                'request.headers.cookie',
-                'request.headers.authorization',
-                'request.headers.proxyAuthorization',
-                'request.headers.setCookie*',
-                'request.headers.x*',
-                'response.headers.cookie',
-                'response.headers.authorization',
-                'response.headers.proxyAuthorization',
-                'response.headers.setCookie*',
-                'response.headers.x*'
-              ]
-            }
-          }
-          EOF
-          
-          # Upload to server
-          scp -o StrictHostKeyChecking=no -i ssh-key.pem newrelic.js ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/newrelic.js
-
       - name: Create Release Version
         run: |
           ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
@@ -290,8 +257,13 @@ jobs:
             
             npm install newrelic --save
             
+            npm install newrelic --save
+            
             # Create symbolic link to shared .env file
             ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            
+            # Create symbolic link to shared newrelic.js file
+            ln -sf ~/fin-invoice-ocr-team6/shared/newrelic.js ./newrelic.js
             
             # Create symbolic link to shared newrelic.js file
             ln -sf ~/fin-invoice-ocr-team6/shared/newrelic.js ./newrelic.js
@@ -324,8 +296,10 @@ jobs:
             cd ~/fin-invoice-ocr-team6/environments/green/current/backend
             ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
             ln -sf ~/fin-invoice-ocr-team6/shared/newrelic.js ./newrelic.js
+            ln -sf ~/fin-invoice-ocr-team6/shared/newrelic.js ./newrelic.js
             ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
             
+            # Stop and start Green environment with New Relic
             # Stop and start Green environment with New Relic
             pm2 stop invoice-ocr-backend-green || true
             pm2 delete invoice-ocr-backend-green || true
@@ -338,6 +312,15 @@ jobs:
             DEPLOYMENT_COLOR=green \
             pm2 start server.js --name invoice-ocr-backend-green --node-args="-r newrelic"
             
+            # Start with New Relic integration
+            PORT=3005 \
+            NEW_RELIC_ENABLED=true \
+            NEW_RELIC_APP_NAME=invoice-ocr-backend-green \
+            NEW_RELIC_LICENSE_KEY=$(grep NEW_RELIC_LICENSE_KEY .env | cut -d"=" -f2) \
+            DEPLOYMENT_COLOR=green \
+            pm2 start server.js --name invoice-ocr-backend-green --node-args="-r newrelic"
+            
+            echo "Deployed to Green environment (port 3005) with New Relic monitoring"
             echo "Deployed to Green environment (port 3005) with New Relic monitoring"
             pm2 list | grep invoice
           '
@@ -357,7 +340,7 @@ jobs:
             
             # Check New Relic connection
             echo "Checking New Relic connection..."
-            pm2 logs invoice-ocr-backend-green --lines 20 --nostream | grep "New Relic" || echo "No New Relic logs found yet"
+            pm2 logs invoice-ocr-backend-green --lines 20 | grep "New Relic" || echo "No New Relic logs found yet"
             
             if [ "$GREEN_STATUS" = "\"status\":\"ok\"" ]; then
               echo "✅ Green environment health check passed!"
@@ -438,7 +421,7 @@ jobs:
             
             # Check New Relic connection
             echo "Checking New Relic connection..."
-            pm2 logs invoice-ocr-backend-blue --lines 20 --nostream | grep "New Relic" || echo "No New Relic logs found yet"
+            pm2 logs invoice-ocr-backend-blue --lines 20 | grep "New Relic" || echo "No New Relic logs found yet"
             
             if [ "$BLUE_STATUS" = "\"status\":\"ok\"" ]; then
               echo "✅ Blue environment health check passed!"
