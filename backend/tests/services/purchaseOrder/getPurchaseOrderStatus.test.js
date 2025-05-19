@@ -1,6 +1,5 @@
 const purchaseOrderService = require('../../../src/services/purchaseOrder/purchaseOrderService');
 const DocumentStatus = require('../../../src/models/enums/DocumentStatus');
-const { from } = require('rxjs');
 
 // Mock console.error for error logging tests
 jest.spyOn(console, 'error').mockImplementation(() => {});
