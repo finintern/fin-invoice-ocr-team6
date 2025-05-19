@@ -1,28 +1,8 @@
 const PdfDecryptionService = require('../../src/services/pdfDecryptionService');
-const PdfDecryptionStrategy = require('../../src/strategies/pdfDecryptionStrategy');
+const PDFDecryptionStrategy = require('../../src/strategies/pdfDecryptionStrategy');
 
-// Mock DecryptLogger
-jest.mock('../../src/services/decryptLoggerAdapter', () => ({
-  logDecryptionStart: jest.fn(),
-  logDecryptionSuccess: jest.fn(),
-  logDecryptionError: jest.fn()
-}));
-
-// Mock Sentry
-jest.mock('../../src/instrument', () => ({
-  addBreadcrumb: jest.fn(),
-  captureException: jest.fn(),
-  configureScope: jest.fn(cb => cb({
-    setContext: jest.fn()
-  }))
-}));
-
-class MockDecryptionStrategy extends PdfDecryptionStrategy {
+class MockDecryptionStrategy extends PDFDecryptionStrategy {
   decrypt = jest.fn();
-  constructor() {
-    super();
-    this.strategyName = 'MockDecryptionStrategy';
-  }
 }
 
 describe('PdfDecryptionService', () => {
