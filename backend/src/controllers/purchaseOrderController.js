@@ -2,10 +2,11 @@ const purchaseOrderService = require("../services/purchaseOrder/purchaseOrderSer
 const FinancialDocumentController = require('./financialDocumentController');
 const Sentry = require("../instrument");
 const { ValidationError, AuthError, ForbiddenError, NotFoundError } = require('../utils/errors');
-const { from, of, throwError } = require('rxjs');
-const { catchError, mergeMap, tap } = require('rxjs/operators');
+const { from, of, throwError, EMPTY } = require('rxjs');
+const { catchError, mergeMap, tap, switchMap, map } = require('rxjs/operators');
 const validateDeletionService = require('../services/validateDeletion');
 const s3Service = require('../services/s3Service');
+
 const PurchaseOrderLogger = require('../services/purchaseOrder/purchaseOrderLogger');
 
 class PurchaseOrderController extends FinancialDocumentController {
@@ -63,21 +64,25 @@ class PurchaseOrderController extends FinancialDocumentController {
    * @throws {404} Not Found if purchase order is not found
    * @throws {500} Internal Server Error 
    */
-  async getPurchaseOrderById(req, res) {
-    try {
-      const { id } = req.params;
-      await this.validateGetRequest(req, id);
-      const purchaseOrderDetail = await this.purchaseOrderService.getPurchaseOrderById(id);
-      
-      if (!purchaseOrderDetail) {
-        throw new NotFoundError("Purchase order not found");
-      }
-      
-      return res.status(200).json(purchaseOrderDetail);
-    } catch (error) {
-      return this.handleError(res, error);
-    }
+  getPurchaseOrderById(req, res) {
+    const { id } = req.params;
+
+    from(this.validateGetRequest(req, id)).pipe(
+      switchMap(() => from(this.purchaseOrderService.getPurchaseOrderById(id))),
+        map((purchaseOrderDetail) => {
+          if (!purchaseOrderDetail) {
+            return res.status(404).json({ message: "Purchase order not found" });
+          }
+
+          return res.status(200).json(purchaseOrderDetail);
+        }),
+        catchError((error) => {
+          this.handleError(res, error);
+          return EMPTY;
+        })
+    ).subscribe();
   }
+
 
   /**
    * @description Retrieves only the status of a purchase order by ID
