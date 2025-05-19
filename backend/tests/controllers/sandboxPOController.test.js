@@ -246,4 +246,42 @@ describe("Sandbox Controller", () => {
       expect(console.error).toHaveBeenCalledWith("[SANDBOX] Error in mock get purchase order details:", expect.any(Error));
     });
   });
+
+  describe("mockDeletePurchaseOrderById", () => {
+    test("should return 200 with success message", async () => {
+      // Arrange: Set up the request with an ID
+      req.params = { id: "test-po-id" };
+
+      // Act: Call the controller method
+      await sandboxController.mockDeletePurchaseOrderById(req, res);
+
+      // Assert: Check the response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Purchase order successfully deleted",
+        id: "test-po-id"
+      });
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining("[SANDBOX] Mock delete purchase order for ID"));
+    });
+    
+    test("should handle errors properly", async () => {
+      // Arrange: Setup to throw an error
+      req.params = { id: "test-po-id" };
+      
+      // Mock console.log to throw an error
+      console.log.mockImplementationOnce(() => {
+        throw new Error("Test error");
+      });
+
+      // Act: Call the controller method
+      await sandboxController.mockDeletePurchaseOrderById(req, res);
+
+      // Assert: Check the response
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        message: "Error in sandbox purchase order deletion"
+      }));
+      expect(console.error).toHaveBeenCalledWith("[SANDBOX] Error in mock delete purchase order:", expect.any(Error));
+    });
+  });
 });
