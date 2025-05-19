@@ -271,6 +271,21 @@ class PurchaseOrderService extends FinancialDocumentService {
   }
 
   /**
+   * Convert any non-Error value to an Error object (exported for testing)
+   * @param {any} err - Value to convert
+   * @returns {Error} Error object
+   */
+  convertToError(err) {
+    // Make sure we're rejecting with an Error object
+    if (err instanceof Error) {
+      return err;
+    } else {
+      // Convert non-Error rejections to Error objects
+      return new Error(String(err));
+    }
+  }
+
+  /**
    * @description Get the status of a purchase order by ID
    * @param {string} id - Purchase order ID
    * @returns {Promise} Promise that resolves with purchase order status information
@@ -323,7 +338,7 @@ class PurchaseOrderService extends FinancialDocumentService {
       return new Promise((resolve, reject) => {
         observable.subscribe({
           next: result => resolve(result),
-          error: err => reject(err)
+          error: err => reject(this.convertToError(err))
         });
       });
     } catch (error) {
