@@ -60,7 +60,7 @@ describe('Purchase Order Service Coverage Tests', () => {
       
       // Verify that the error was properly logged
       expect(consoleSpy).toHaveBeenCalledWith(
-        'Error getting purchase order status: Database connection failure',
+        'Error in getPurchaseOrderStatus: Database connection failure',
         databaseError
       );
       
