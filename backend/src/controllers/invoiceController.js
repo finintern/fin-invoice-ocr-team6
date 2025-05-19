@@ -131,28 +131,28 @@ class InvoiceController extends FinancialDocumentController {
   }
 
   /**
-   * @description Retrieves only the status of an invoice by ID
+   * @description Gets the current processing status of an invoice
    * 
-   * @param {Object} req - Express request object
+   * @param {Object} req - Express request object with invoice ID in params
    * @param {Object} res - Express response object
-   * @returns {Promise<Object>} JSON with invoice ID and status
+   * @returns {Object} JSON with status information (200) or error responses
    */
-  async getInvoiceStatus(req, res) {
+  getInvoiceStatus(req, res) {
     const { id } = req.params;
-    try {
-      InvoiceLogger.logProcessingStart(id); 
 
-      await this.validateGetRequest(req, id);
-
-      const statusResult = await this.service.getInvoiceStatus(id);
-
-      InvoiceLogger.logProcessingComplete(id); 
-      return res.status(200).json(statusResult);
-    } catch (error) {
-      InvoiceLogger.logError(id, error, 'GET_INVOICE_STATUS_CONTROLLER'); 
-      return this.handleError(res, error);
-    }
+    from(this.validateGetRequest(req, id)).pipe(
+      tap(() => InvoiceLogger.logProcessingStart(id)),
+      switchMap(() => from(this.service.getInvoiceStatus(id))),
+      tap(() => InvoiceLogger.logProcessingComplete(id)),
+      tap((statusResult) => res.status(200).json(statusResult)),
+      catchError((error) => {
+        InvoiceLogger.logError(id, error, 'GET_INVOICE_STATUS_CONTROLLER');
+        this.handleError(res, error);
+        return of(null);
+      })
+    ).subscribe();
   }
+
 
 
   deleteInvoiceById(req, res) {
