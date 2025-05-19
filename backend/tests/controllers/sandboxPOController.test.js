@@ -1,19 +1,46 @@
 const { mockRequest, mockResponse } = require("jest-mock-req-res");
-const sandboxController = require("../../src/controllers/sandboxController");
+const sandboxController = require("../../src/controllers/sandboxPOController");
 const { AzurePurchaseOrderMapper } = require('../../src/services/purchaseOrderMapperService/purchaseOrderMapperService');
 
 // Mock the AzurePurchaseOrderMapper
 jest.mock('../../src/services/purchaseOrderMapperService/purchaseOrderMapperService', () => ({
   AzurePurchaseOrderMapper: jest.fn().mockImplementation(() => ({
     mapToPurchaseOrderModel: jest.fn().mockReturnValue({
-      id: 'mocked-po-id',
-      partner_id: 'test-partner-id',
-      purchase_order_number: 'PO-12345',
-      purchase_order_date: '2023-01-01',
-      created_at: '2023-01-15T08:30:00.000Z',
-      updated_at: '2023-01-15T08:30:00.000Z',
-      file_url: 'https://mock-s3-bucket.s3.amazonaws.com/test-id.pdf',
-      analysis_url: 'https://mock-s3-bucket.s3.amazonaws.com/analysis/test-id-analysis.json'
+      purchaseOrderData: {
+        po_number: 'PO-12345',
+        payment_terms: '30 days',
+        total_amount: 93.50,
+        subtotal_amount: 85.00,
+        tax_amount: 8.50,
+        discount_amount: null,
+        currency_symbol: '$',
+        currency_code: 'USD'
+      },
+      customerData: {
+        name: 'Test Business',
+        contact_name: 'Test Business',
+        address: '123 Somewhere St, Melbourne, VIC 3000',
+        tax_id: null
+      },
+      vendorData: {
+        name: 'DEMO - Sliced Invoices',
+        contact_name: 'DEMO - Sliced Invoices',
+        address: 'Suite 5A-1204, 123 Somewhere Street, Your City AZ 12345',
+        tax_id: null
+      },
+      itemsData: [
+        {
+          description: 'Web Design This is a sample description ...',
+          quantity: 1,
+          unit: null,
+          unitPrice: 85,
+          amount: 85
+        }
+      ],
+      data: {
+        purchaseOrderDate: '2023-01-01',
+        due_date: '2023-01-31'
+      }
     })
   }))
 }));
@@ -50,9 +77,7 @@ describe("Sandbox Controller", () => {
       expect(res.json).toHaveBeenCalledWith({
         message: "No file uploaded"
       });
-    });
-
-    test("should return 200 with mapped data when file is uploaded", async () => {
+    });    test("should return 200 with mapped data when file is uploaded", async () => {
       // Arrange: Set up the request with a file
       req.file = {
         buffer: Buffer.from("test file content"),
@@ -66,12 +91,15 @@ describe("Sandbox Controller", () => {
       // Assert: Check the response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-        id: 'mocked-po-id'
+        message: expect.objectContaining({
+          message: "Purchase order upload processed",
+          id: "123e4567-e89b-12d3-a456-426614174001",
+          status: "Processing"
+        })
       }));
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining("[SANDBOX] Mock purchase order upload processed"));
     });
-    
-    test("should handle errors properly", async () => {
+      test("should handle errors properly", async () => {
       // Arrange: Set up the request with a file but throw an error
       req.file = {
         buffer: Buffer.from("test file content"),
@@ -79,8 +107,8 @@ describe("Sandbox Controller", () => {
         mimetype: "application/pdf"
       };
       
-      // Mock the AzurePurchaseOrderMapper to throw an error
-      AzurePurchaseOrderMapper.mockImplementationOnce(() => {
+      // Mock console.log to throw an error
+      console.log.mockImplementationOnce(() => {
         throw new Error("Test error");
       });
 
@@ -133,10 +161,52 @@ describe("Sandbox Controller", () => {
     });
   });
 
-  describe("mockGetPurchaseOrderById", () => {
-    test("should return 200 with mocked purchase order data", async () => {
+  describe("mockGetPurchaseOrderById", () => {    test("should return 200 with mocked purchase order data", async () => {
       // Arrange: Set up the request with an ID
       req.params = { id: "test-po-id" };
+      
+      // Mock the mapper with a proper implementation that won't cause issues
+      const mockMapperFn = jest.fn().mockReturnValue({
+        purchaseOrderData: {
+          po_number: 'PO-12345',
+          payment_terms: '30 days',
+          total_amount: 93.50,
+          subtotal_amount: 85.00,
+          tax_amount: 8.50,
+          discount_amount: null,
+          currency_symbol: '$',
+          currency_code: 'USD'
+        },
+        vendorData: {
+          name: 'DEMO - Sliced Invoices',
+          contact_name: 'DEMO - Sliced Invoices',
+          address: 'Suite 5A-1204, 123 Somewhere Street, Your City AZ 12345',
+          tax_id: null
+        },
+        customerData: {
+          name: 'Test Business',
+          contact_name: 'Test Business',
+          address: '123 Somewhere St, Melbourne, VIC 3000',
+          tax_id: null
+        },
+        itemsData: [
+          {
+            description: 'Web Design This is a sample description ...',
+            quantity: 1,
+            unit: null,
+            unitPrice: 85,
+            amount: 85
+          }
+        ],
+        data: {
+          purchaseOrderDate: '2023-01-01',
+          due_date: '2023-01-31'
+        }
+      });
+      
+      AzurePurchaseOrderMapper.mockImplementationOnce(() => ({
+        mapToPurchaseOrderModel: mockMapperFn
+      }));
 
       // Act: Call the controller method
       await sandboxController.mockGetPurchaseOrderById(req, res);
@@ -144,7 +214,9 @@ describe("Sandbox Controller", () => {
       // Assert: Check the response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-        id: "test-po-id"
+        purchaseOrderData: expect.objectContaining({
+          po_number: 'PO-12345'
+        })
       }));
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining("[SANDBOX] Mock get purchase order details for ID"));
     });
