@@ -5,26 +5,38 @@ const PurchaseOrderRepository = require('../../repositories/purchaseOrderReposit
 const CustomerRepository = require('../../repositories/customerRepository.js');
 const VendorRepository = require('../../repositories/vendorRepository.js');
 const ItemRepository = require('../../repositories/itemRepository.js');
-const AzureDocumentAnalyzer = require('../analysis/azureDocumentAnalyzer');
+const { OcrAnalyzerFactory } = require('../analysis');
 const PurchaseOrderValidator = require('./purchaseOrderValidator');
 const PurchaseOrderResponseFormatter = require('./purchaseOrderResponseFormatter');
 const { AzurePurchaseOrderMapper } = require('../purchaseOrderMapperService/purchaseOrderMapperService');
 const DocumentStatus = require('../../models/enums/DocumentStatus');
+const PurchaseOrderLogger = require('./purchaseOrderLogger');
 const { NotFoundError } = require('../../utils/errors');
 const { from } = require('rxjs');
 const { catchError, map, switchMap } = require('rxjs/operators');
 
 class PurchaseOrderService extends FinancialDocumentService {
-  constructor() {
-    super("Purchase Order");
-    this.purchaseOrderRepository = new PurchaseOrderRepository();
-    this.customerRepository = new CustomerRepository();
-    this.vendorRepository = new VendorRepository();
-    this.itemRepository = new ItemRepository();
-    this.documentAnalyzer = new AzureDocumentAnalyzer();
-    this.validator = new PurchaseOrderValidator();
-    this.responseFormatter = new PurchaseOrderResponseFormatter();
-    this.azureMapper = new AzurePurchaseOrderMapper();
+  constructor(dependencies = {}) {
+    // Call parent constructor with document type and s3Service
+    super("Purchase Order", dependencies.s3Service);
+    
+    // Initialize repositories
+    this.purchaseOrderRepository = dependencies.purchaseOrderRepository || new PurchaseOrderRepository();
+    this.customerRepository = dependencies.customerRepository || new CustomerRepository();
+    this.vendorRepository = dependencies.vendorRepository || new VendorRepository();
+    this.itemRepository = dependencies.itemRepository || new ItemRepository();
+    
+    // Initialize services
+    this.ocrType = dependencies.ocrType || process.env.OCR_ANALYZER_TYPE || 'azure';
+    this.ocrConfig = dependencies.ocrConfig || {};
+    this.documentAnalyzer = dependencies.documentAnalyzer || 
+                           OcrAnalyzerFactory.createAnalyzer(this.ocrType, this.ocrConfig);
+    this.validator = dependencies.validator || new PurchaseOrderValidator();
+    this.responseFormatter = dependencies.responseFormatter || new PurchaseOrderResponseFormatter();
+    this.azureMapper = dependencies.azureMapper || new AzurePurchaseOrderMapper();
+    
+    // Logger uses default value if not provided
+    this.logger = dependencies.logger || this.logger;
   }
 
   async uploadPurchaseOrder(fileData) {
@@ -79,7 +91,7 @@ class PurchaseOrderService extends FinancialDocumentService {
         level: "info"
       });
 
-      // 1. Analyze purchase order using Azure
+      // 1. Analyze purchase order using selected OCR analyzer
       const analysisResult = await this.analyzePurchaseOrder(buffer);
 
       // 2. Upload OCR results to S3 as JSON and get the URL
@@ -266,17 +278,22 @@ class PurchaseOrderService extends FinancialDocumentService {
    */
   async getPurchaseOrderStatus(id) {
     try {
-
       const purchaseOrder = await this.purchaseOrderRepository.findById(id);
 
       if (!purchaseOrder) {
+        PurchaseOrderLogger.logStatusNotFound(id);
         throw new NotFoundError("Purchase order not found");
       }
-
-      return {
+      
+      const statusResult = {
         id: purchaseOrder.id,
         status: purchaseOrder.status
       };
+
+      // Log successful status request - moved before return statement
+      PurchaseOrderLogger.logStatusRequest(id, purchaseOrder.status);
+      
+      return statusResult;
     } catch (error) {
       // Re-throw NotFoundError and ValidationError as is
       if (error.name === "NotFoundError" || error.name === "ValidationError") {
@@ -284,6 +301,7 @@ class PurchaseOrderService extends FinancialDocumentService {
       }
 
       console.error(`Error getting purchase order status: ${error.message}`, error);
+      PurchaseOrderLogger.logStatusError(id, error);
       Sentry.captureException(error);
 
       // Wrap other errors
@@ -297,23 +315,84 @@ class PurchaseOrderService extends FinancialDocumentService {
    * @returns {Observable} Observable with success message or error
    */
   deletePurchaseOrderById(id) {
+    // Log deletion initiated
+    PurchaseOrderLogger.logDeletionInitiated(id);
+
     return from(Promise.resolve())
       .pipe(
         switchMap(() => from(this.purchaseOrderRepository.delete(id))),
         map(result => {
           if (result === 0) {
             const err = new Error(`Failed to delete purchase order with ID: ${id}`);
+            // Always log error and mark as logged
+            PurchaseOrderLogger.logDeletionError(id, err);
+            err.logged = true;
             Sentry.captureException(err);
             throw err;
           }
+          // Log successful deletion
+          PurchaseOrderLogger.logDeletionSuccess(id);
           return { message: "Purchase order successfully deleted" };
         }),
         catchError(error => {
+          // Always log error and mark as logged
+          PurchaseOrderLogger.logDeletionError(id, error);
+          error.logged = true;
           Sentry.captureException(error);
-          throw new Error(error.message);
+          throw error;
         })
       );
   }
 }
 
-module.exports = new PurchaseOrderService();
+/**
+ * Factory function to create properly configured PurchaseOrderService instance
+ * @param {Object} customDependencies - Custom dependencies to override defaults
+ * @returns {PurchaseOrderService} Configured PurchaseOrderService instance
+ */
+function createPurchaseOrderService(customDependencies = {}) {
+  // Import default dependencies
+  const PurchaseOrderRepository = require('../../repositories/purchaseOrderRepository');
+  const CustomerRepository = require('../../repositories/customerRepository.js');
+  const VendorRepository = require('../../repositories/vendorRepository.js');
+  const ItemRepository = require('../../repositories/itemRepository.js');
+  const { OcrAnalyzerFactory } = require('../analysis');
+  const PurchaseOrderValidator = require('./purchaseOrderValidator');
+  const PurchaseOrderResponseFormatter = require('./purchaseOrderResponseFormatter');
+  const { AzurePurchaseOrderMapper } = require('../purchaseOrderMapperService/purchaseOrderMapperService');
+  const PurchaseOrderLogger = require('./purchaseOrderLogger');
+  const s3Service = require('../s3Service');
+  
+  // Get OCR type from environment or use default
+  const ocrType = process.env.OCR_ANALYZER_TYPE || 'azure';
+  const ocrConfig = {};
+  
+  // Combine default dependencies with custom dependencies
+  const dependencies = {
+    purchaseOrderRepository: new PurchaseOrderRepository(),
+    customerRepository: new CustomerRepository(),
+    vendorRepository: new VendorRepository(),
+    itemRepository: new ItemRepository(),
+    documentAnalyzer: OcrAnalyzerFactory.createAnalyzer(ocrType, ocrConfig),
+    ocrType,
+    ocrConfig,
+    validator: new PurchaseOrderValidator(),
+    responseFormatter: new PurchaseOrderResponseFormatter(),
+    azureMapper: new AzurePurchaseOrderMapper(),
+    logger: PurchaseOrderLogger,
+    s3Service: s3Service,
+    ...customDependencies
+  };
+  
+  return new PurchaseOrderService(dependencies);
+}
+
+// Create default instance for compatibility
+const defaultInstance = createPurchaseOrderService();
+
+// Export default instance as main export
+module.exports = defaultInstance;
+
+// Also export class and factory function for more flexible usage
+module.exports.PurchaseOrderService = PurchaseOrderService;
+module.exports.createPurchaseOrderService = createPurchaseOrderService;

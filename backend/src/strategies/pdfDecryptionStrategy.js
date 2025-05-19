@@ -1,7 +1,7 @@
-class pdfDecryptionStrategy {
+class PdfDecryptionStrategy {
     decrypt() {
         throw new Error('decrypt method must be implemented');
     }
 }
 
-module.exports = pdfDecryptionStrategy;
+module.exports = PdfDecryptionStrategy;

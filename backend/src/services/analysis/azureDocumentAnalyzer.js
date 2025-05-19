@@ -1,14 +1,20 @@
 const { DocumentAnalysisClient, AzureKeyCredential } = require("@azure/ai-form-recognizer");
 const Sentry = require("../../instrument");
 const dotenv = require("dotenv");
+const OcrAnalyzer = require("./OcrAnalyzer");
 
 dotenv.config();
 
-class AzureDocumentAnalyzer {
-  constructor() {
-    this.endpoint = process.env.AZURE_ENDPOINT;
-    this.key = process.env.AZURE_KEY;
-    this.modelId = process.env.AZURE_INVOICE_MODEL;
+class AzureDocumentAnalyzer extends OcrAnalyzer {
+  constructor(config = {}) {
+    super();
+    this.endpoint = config.endpoint || process.env.AZURE_ENDPOINT;
+    this.key = config.key || process.env.AZURE_KEY;
+    this.modelId = config.modelId || process.env.AZURE_INVOICE_MODEL;
+  }
+
+  getType() {
+    return 'azure';
   }
 
   async analyzeDocument(documentSource) {
