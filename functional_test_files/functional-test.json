@@ -1,11 +1,10 @@
 {
 	"info": {
-		"_postman_id": "07f53277-f568-4c54-816e-5a422194b463",
+		"_postman_id": "607e16e5-4700-4c56-96e8-6f94f88d08c7",
 		"name": "Functional Test",
 		"description": "API Purchase Order & Invoice Reader fineksi dibuat untuk memberikan kemudahan bagi partner dalam menganalisis dan mengelola dokumen PO dan invoice yang mereka miliki.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "29703395",
-		"_collection_link": "https://ppl-a-6.postman.co/workspace/Sprint-1~28590573-857b-4507-94a4-b601aa70d10e/collection/29703395-07f53277-f568-4c54-816e-5a422194b463?action=share&source=collection_link&creator=29703395"
+		"_exporter_id": "29699485"
 	},
 	"item": [
 		{
@@ -1386,7 +1385,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/invoices/{{invoice_id_forbidden}}",
+							"raw": "{{baseUrl}}/api/invoices/status/{{invoice_id_forbidden}}",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1905,6 +1904,313 @@
 				},
 				{
 					"name": "get po by id unauthorized",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 401\", function () {\r",
+									"    pm.response.to.have.status(401);\r",
+									"});\r",
+									"\r",
+									"pm.test(\"Response time is less than 1000ms\", function () {\r",
+									"    pm.expect(pm.response.responseTime).to.be.below(1000);\r",
+									"});\r",
+									"\r",
+									"pm.test(\"Response body has message field with value 'Unauthorized: Missing credentials'\", function () {\r",
+									"    const responseBody = pm.response.json();\r",
+									"    pm.expect(responseBody.message).to.equal(\"Unauthorized: Missing credentials\");\r",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/purchase-orders/{{po_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"purchase-orders",
+								"{{po_id}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Get Invoice",
+			"item": [
+				{
+					"name": "get invoice by id analyzed",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Asserting the status code\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Asserting the presence of data.documents array in the response body\r",
+									"pm.test(\"Response body has data.documents array\", function () {\r",
+									"    const responseBody = pm.response.json();\r",
+									"    pm.expect(responseBody.data.documents).to.be.an('array');\r",
+									"    pm.expect(responseBody.data.documents).to.have.lengthOf.at.least(1);\r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "client_id",
+								"value": "{{client_id}}",
+								"type": "text"
+							},
+							{
+								"key": "client_secret",
+								"value": "{{client_secret}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/purchase-orders/{{po_id}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"purchase-orders",
+								"{{po_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get invoice by id processing",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Test for status code\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Test for message in the response body\r",
+									"pm.test(\"Message indicates purchase order is being processed\", function () {\r",
+									"    const jsonData = pm.response.json();\r",
+									"    pm.expect(jsonData.message).to.contains(\"process\");\r",
+									"});\r",
+									"\r",
+									"// Test for empty array of documents\r",
+									"pm.test(\"Documents array is empty\", function () {\r",
+									"    const jsonData = pm.response.json();\r",
+									"    pm.expect(jsonData.data.documents).to.be.an('array').that.is.empty;\r",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "client_id",
+								"value": "{{client_id}}",
+								"type": "text"
+							},
+							{
+								"key": "client_secret",
+								"value": "{{client_secret}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/purchase-orders/{{po_id_processing}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"purchase-orders",
+								"{{po_id_processing}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get invoice by id failed",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Test for status code\r",
+									"pm.test(\"Status code is 200\", function () {\r",
+									"    pm.response.to.have.status(200);\r",
+									"});\r",
+									"\r",
+									"// Test for message field in the response body\r",
+									"pm.test(\"Message field exists in the response body\", function () {\r",
+									"    const responseBody = pm.response.json();\r",
+									"    pm.expect(responseBody.message).to.exist;\r",
+									"    pm.expect(responseBody.message).to.be.a('string');\r",
+									"});\r",
+									"\r",
+									"// Test for data field in the response body\r",
+									"pm.test(\"Data field exists in the response body\", function () {\r",
+									"    const responseBody = pm.response.json();\r",
+									"    pm.expect(responseBody.data).to.exist;\r",
+									"    pm.expect(responseBody.data).to.be.an('object');\r",
+									"});\r",
+									"\r",
+									"// Test for documents field inside data field in the response body\r",
+									"pm.test(\"Documents field exists inside data in the response body\", function () {\r",
+									"    const responseBody = pm.response.json();\r",
+									"    pm.expect(responseBody.data.documents).to.exist;\r",
+									"    pm.expect(responseBody.data.documents).to.be.an('array');\r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "client_id",
+								"value": "{{client_id}}",
+								"type": "text"
+							},
+							{
+								"key": "client_secret",
+								"value": "{{client_secret}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/purchase-orders/{{po_id_failed}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"purchase-orders",
+								"{{po_id_failed}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get invoice by id forbidden",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "client_id",
+								"value": "{{client_id}}",
+								"type": "text"
+							},
+							{
+								"key": "client_secret",
+								"value": "{{client_secret}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/purchase-orders/{{po_id_forbidden}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"purchase-orders",
+								"{{po_id_forbidden}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get invoice by invalid id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const response = pm.response.json();\r",
+									"\r",
+									"// Asserting the status code\r",
+									"pm.test(\"Status code is 404\", function () {\r",
+									"    pm.response.to.have.status(404);\r",
+									"});\r",
+									"\r",
+									"// Asserting the message in the response body\r",
+									"pm.test(\"Verify the message in the response body\", function () {\r",
+									"    pm.expect(response.message).to.equal(\"Purchase order not found\");\r",
+									"});\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "client_id",
+								"value": "{{client_id}}",
+								"type": "text"
+							},
+							{
+								"key": "client_secret",
+								"value": "{{client_secret}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/purchase-orders/invalid-id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"purchase-orders",
+								"invalid-id"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get invoice by id unauthorized",
 					"event": [
 						{
 							"listen": "test",
