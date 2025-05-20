@@ -125,7 +125,7 @@ jobs:
     name: Deploy to Green Environment
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment-2' || github.ref == 'refs/heads/deployment'
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -499,6 +499,8 @@ jobs:
                 "user": "${{ github.actor }}"
               }
             }'
+
+      # FIXED CHANGELOG GENERATION
       - name: Generate Changelog
         id: changelog
         run: |
@@ -594,10 +596,9 @@ jobs:
             FINAL_CHANGELOG+="\n...and more commits. View the full commit history in the repository."
           fi
 
-          # Encode the changelog using base64 to handle special characters
-          ENCODED_CHANGELOG=$(echo -e "$FINAL_CHANGELOG" | base64)
-          echo "Encoded Changelog: $ENCODED_CHANGELOG"
-          echo "CHANGELOG=$ENCODED_CHANGELOG" >> $GITHUB_ENV
+          # Write changelog to a file instead of using base64 encoding and environment variables
+          echo -e "$FINAL_CHANGELOG" > changelog.md
+          echo "Changelog written to changelog.md"
 
       - name: Create GitHub Release
         if: success()
@@ -606,7 +607,9 @@ jobs:
         run: |
           VERSION="${{ env.VERSION }}"
           RELEASE_TITLE="Release $VERSION"
-          CHANGELOG="${{ env.CHANGELOG }}"
+          
+          # Read changelog from file
+          CHANGELOG=$(cat changelog.md)
 
           # Create the release
           gh release create "$VERSION" \
@@ -691,4 +694,3 @@ jobs:
         with:
           name: functional-test-report
           path: functional_test_files/reports/functional-test-report.html
-      
