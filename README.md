@@ -354,6 +354,373 @@ Jika ingin menambah pengujian keamanan baru:
 
 <details>
 
+  <summary><strong>Tutorial Dokumentasi API dengan Swagger</strong></summary>
+
+## Tutorial: Dokumentasi API dengan Swagger
+
+Tutorial ini menjelaskan cara mendokumentasikan endpoint API menggunakan Swagger dan cara mengakses dokumentasi tersebut untuk testing.
+
+### 1. Persiapan
+
+Swagger sudah diintegrasikan ke dalam proyek ini menggunakan paket `swagger-jsdoc` dan `swagger-ui-express`. Konfigurasi dasar dapat ditemukan di file:
+
+```
+backend/src/config/swagger.js
+```
+
+Pastikan package yang diperlukan telah terinstal:
+
+```bash
+npm install swagger-jsdoc swagger-ui-express
+```
+
+### 2. Cara Mendokumentasikan Endpoint API
+
+Untuk mendokumentasikan endpoint API baru, tambahkan JSDoc comments di atas handler route di file route yang sesuai (dalam direktori `backend/src/routes/`).
+
+#### Contoh Dokumentasi untuk Endpoint GET:
+
+```javascript
+/**
+ * @swagger
+ * /api/invoices:
+ *   get:
+ *     summary: Mengambil daftar invoice
+ *     description: Mengembalikan daftar semua invoice yang tersedia di database
+ *     tags: [Invoices]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Jumlah maksimum item yang akan dikembalikan
+ *     responses:
+ *       200:
+ *         description: Daftar invoice berhasil diambil
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Invoice'
+ *       401:
+ *         description: Tidak terautentikasi
+ *       500:
+ *         description: Server error
+ */
+router.get('/invoices', invoiceController.getAllInvoices);
+```
+
+#### Contoh Dokumentasi untuk Endpoint POST:
+
+```javascript
+/**
+ * @swagger
+ * /api/purchase-orders:
+ *   post:
+ *     summary: Upload purchase order baru
+ *     description: Mengunggah file purchase order baru untuk diproses
+ *     tags: [Purchase Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: File PDF purchase order
+ *               partner_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID partner terkait
+ *             required:
+ *               - file
+ *     responses:
+ *       202:
+ *         description: Purchase order berhasil diunggah dan sedang diproses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PurchaseOrderStatus'
+ *       400:
+ *         description: Parameter tidak valid
+ *       401:
+ *         description: Tidak terautentikasi
+ *       500:
+ *         description: Server error
+ */
+router.post('/purchase-orders', uploadMiddleware, poController.uploadPurchaseOrder);
+```
+
+### 3. Mengakses Dokumentasi Swagger
+
+Untuk melihat dan berinteraksi dengan dokumentasi API:
+
+1. Jalankan server backend:
+   ```bash
+   cd backend
+   npm start
+   ```
+
+2. Buka browser dan kunjungi:
+   ```
+   http://localhost:3000/api-docs
+   ```
+
+3. Anda akan melihat UI Swagger yang menampilkan semua endpoint API yang telah didokumentasikan.
+
+### 4. Menggunakan Swagger UI untuk Testing API
+
+Swagger UI memungkinkan Anda untuk menguji API langsung dari browser:
+
+1. Klik pada endpoint yang ingin diuji untuk memperluas detailnya
+2. Klik tombol "Try it out"
+3. Isi parameter yang diperlukan (jika ada)
+4. Klik "Execute" untuk mengirim request
+5. Hasil respons akan ditampilkan di bawah, termasuk status code, response headers, dan response body
+
+### 5. Menambahkan Skema Model baru
+
+Skema model didefinisikan di file `backend/src/config/swagger.js`. Untuk menambahkan model baru:
+
+1. Buka file `swagger.js`
+2. Cari bagian `components: { schemas: { ... } }`
+3. Tambahkan definisi model baru, misalnya:
+
+```javascript
+NewModel: {
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+      example: '123e4567-e89b-12d3-a456-426614174000'
+    },
+    name: {
+      type: 'string',
+      example: 'Sample Name'
+    },
+    // Tambahkan property lain sesuai kebutuhan
+  }
+}
+```
+
+### 6. Tips Dokumentasi API yang Baik
+
+- **Konsistensi**: Gunakan format yang konsisten untuk semua endpoint
+- **Kelengkapan**: Dokumentasikan semua parameter, request body, dan kemungkinan response
+- **Contoh**: Sertakan contoh request dan response
+- **Pengelompokan**: Gunakan tag untuk mengelompokkan endpoint terkait
+- **Deskripsi**: Berikan deskripsi yang jelas tentang apa yang dilakukan endpoint
+- **Autentikasi**: Dokumentasikan kebutuhan autentikasi dengan jelas
+
+### 7. Struktur Tags
+
+Untuk menjaga agar dokumentasi API terorganisir dengan baik, gunakan tag-tag berikut:
+
+- `Invoices`: Untuk endpoint terkait invoice
+- `Purchase Orders`: Untuk endpoint terkait purchase order
+
+</details>
+
+<details>
+  <summary><strong>Tutorial Monitoring dan Alert dengan Sentry</strong></summary>
+
+## Tutorial: Monitoring dan Alert dengan Sentry
+
+Tutorial ini menjelaskan cara menggunakan Sentry untuk monitoring aplikasi dan mengatur alert untuk mendeteksi masalah pada layanan eksternal seperti Amazon S3.
+
+### 1. Persiapan dan Instalasi
+
+#### 1.1 Membuat Akun Sentry
+
+1. Kunjungi [sentry.io](https://sentry.io) dan buat akun baru, atau login jika sudah memiliki akun
+2. Buat project baru di Sentry, pilih platform Node.js
+3. Catat DSN (Data Source Name) yang diberikan setelah project dibuat
+
+#### 1.2 Instalasi Sentry SDK
+
+Install Sentry SDK di aplikasi Node.js:
+
+```bash
+npm install @sentry/node @sentry/tracing
+```
+
+### 2. Konfigurasi Dasar Sentry
+
+Tambahkan konfigurasi berikut di file `app.js` atau file inisialisasi aplikasi:
+
+```javascript
+const Sentry = require('@sentry/node');
+const Tracing = require('@sentry/tracing');
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN, // Simpan di .env
+  integrations: [
+    new Sentry.Integrations.Http({ tracing: true }), 
+    new Tracing.Integrations.Express({ app })
+  ],
+  tracesSampleRate: 1.0, // Sampel 100% untuk lingkungan development (kurangi untuk production)
+  environment: process.env.NODE_ENV || 'development'
+});
+
+// Middleware Sentry harus menjadi middleware pertama
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
+
+// Routing aplikasi
+// ...
+
+// Error handler Sentry harus berada sebelum error handler lainnya
+app.use(Sentry.Handlers.errorHandler());
+```
+
+### 3. Monitoring Layanan AWS S3
+
+Untuk monitoring layanan S3, modifikasi service S3 agar mengirimkan error ke Sentry:
+
+```javascript
+const AWS = require("aws-sdk");
+const { v4: uuidv4 } = require('uuid');
+const Sentry = require('@sentry/node');
+
+class s3Service {
+    constructor() {
+        this.s3 = new AWS.S3({
+            region: process.env.AWS_REGION,
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        });
+        this.bucketName = process.env.AWS_BUCKET_NAME;
+    }
+
+    /**
+     * Upload a file to S3
+     * @param {Buffer} fileBuffer - File content as a buffer 
+     * @returns {Promise<string>} - Resolves to the uploaded file URL
+     */
+    async uploadFile(fileBuffer) {
+        const fileName = `${uuidv4()}.pdf`;
+        const params = {
+            Bucket: this.bucketName,
+            Key: fileName,
+            Body: fileBuffer,        
+        };
+
+        try {
+            const data = await this.s3.upload(params).promise();
+            return data.Location;
+        } catch (error) {
+            // Tangkap error dan kirim ke Sentry dengan konteks
+            Sentry.withScope(scope => {
+                scope.setTag('service', 's3');
+                scope.setTag('operation', 'uploadFile');
+                scope.setContext('s3_parameters', {
+                    bucket: this.bucketName,
+                    fileName: fileName
+                });
+                Sentry.captureException(error);
+            });
+            console.error("S3 Upload Error:", error);
+            throw error;
+        }
+    }
+
+    // Metode lainnya...
+}
+
+module.exports = new s3Service();
+```
+
+### 4. Membuat Custom Alert di Sentry
+
+#### 4.1 Alerts untuk Error S3
+
+1. Login ke dashboard Sentry
+2. Pilih project yang telah dibuat
+3. Klik menu "Alerts" di sidebar
+4. Klik tombol "Create Alert Rule"
+5. Pilih "Issues" sebagai tipe alert
+6. Pada bagian "When", atur kondisi:
+   - Set filter: `tag:service s3`
+   - Pilih "The issue is first seen"
+7. Pada bagian "Actions", tambahkan action notifikasi:
+   - Pilih channel notifikasi (email, Slack, PagerDuty, dsb)
+   - Atur subjek, misalnya: "ALERT: S3 Service Issue Detected"
+8. Atur severity level dan simpan alert rule
+
+#### 4.2 Alert untuk Error Rate Tinggi
+
+1. Di menu "Create Alert Rule", pilih "Metrics" sebagai tipe alert
+2. Pilih "Error Rate"
+3. Atur kondisi, misalnya: "error rate > 5%"
+4. Tambahkan filter untuk hanya memonitor service S3:
+   - `tag:service:s3` 
+5. Atur action notifikasi dan simpan
+
+### 5. Implementasi Health Check
+
+Buat endpoint health check untuk memeriksa status S3:
+
+```javascript
+// routes/healthcheck.js
+const express = require('express');
+const router = express.Router();
+const s3Service = require('../services/s3Service');
+const Sentry = require('@sentry/node');
+
+router.get('/health/s3', async (req, res) => {
+  try {
+    // Coba akses S3 dengan operasi ringan
+    await s3Service.s3.headBucket({ Bucket: s3Service.bucketName }).promise();
+    
+    return res.status(200).json({
+      status: 'healthy',
+      service: 's3',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    // Catat error di Sentry
+    Sentry.withScope(scope => {
+      scope.setTag('service', 's3');
+      scope.setTag('check_type', 'health_check');
+      Sentry.captureException(error);
+    });
+    
+    return res.status(503).json({
+      status: 'unhealthy',
+      service: 's3',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+module.exports = router;
+```
+
+### 6. Tips Monitoring yang Efektif
+
+- **Kategorisasi Error**: Gunakan tag untuk mengkategorikan error (misalnya 'service', 'operation', dsb)
+- **Cakupan yang Tepat**: Pastikan hanya error yang benar-benar penting yang memicu alert
+- **Priotitas Alert**: Atur level severity yang sesuai agar tim tidak mengalami alert fatigue
+- **Context yang Cukup**: Sertakan informasi kontekstual yang memadai dalam setiap error
+- **Fallback Plan**: Buat strategi fallback untuk menangani layanan yang down (misalnya S3 down)
+- **Pemantauan Bertingkat**:
+  - Warning: Untuk masalah minor, tidak perlu notifikasi darurat
+  - Error: Untuk masalah yang memerlukan penanganan segera tapi tidak kritis
+  - Critical: Untuk masalah yang menyebabkan downtime atau penurunan layanan secara signifikan
+
+</details>
+
   <summary><strong>Tutorial Profiling dengan JavaScript Debug Terminal</strong></summary>
 
 ## Tutorial: Profiling Aplikasi dengan JavaScript Debug Terminal
