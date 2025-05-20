@@ -158,8 +158,33 @@ const mockGetInvoiceById = async (req, res) => {
   }
 };
 
+/**
+ * Mock delete invoice by ID
+ */
+const mockDeleteInvoiceById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Log the mock request
+    console.log(`[SANDBOX] Mock delete invoice for ID: ${id}`);
+
+    // Return a success response
+    return res.status(200).json({
+      message: "Invoice successfully deleted",
+      id: id
+    });
+  } catch (error) {
+    console.error("[SANDBOX] Error in mock delete invoice:", error);
+    return res.status(500).json({
+      message: "Error in sandbox invoice deletion",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   mockUploadInvoice,
   mockGetInvoiceStatus,
-  mockGetInvoiceById
+  mockGetInvoiceById,
+  mockDeleteInvoiceById
 };

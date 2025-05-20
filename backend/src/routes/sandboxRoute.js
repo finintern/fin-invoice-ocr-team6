@@ -409,6 +409,52 @@ router.get('/invoices/:id', sandboxInvoiceController.mockGetInvoiceById);
 
 /**
  * @swagger
+ * /sandbox/invoices/{id}:
+ *   delete:
+ *     summary: Mock endpoint to delete an invoice by ID
+ *     tags: [Sandbox]
+ *     description: Deletes an invoice by ID and returns a success message
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: The ID of the invoice to delete
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Invoice successfully deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Invoice successfully deleted
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                   example: 123e4567-e89b-12d3-a456-426614174001
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Error in sandbox invoice deletion
+ *                 error:
+ *                   type: string
+ *                   example: Detailed error information
+ */
+router.delete('/invoices/:id', sandboxInvoiceController.mockDeleteInvoiceById);
+
+/**
+ * @swagger
  * /sandbox/purchase-orders/{id}:
  *   delete:
  *     summary: Mock endpoint to delete a purchase order by ID
