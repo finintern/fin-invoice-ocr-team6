@@ -6,8 +6,6 @@ const healthRoutes = require('./routes/healthRoute');
 const app = express();
 app.disable("x-powered-by");
 
-app.use(express.json());
-
 
 app.use('/health', healthRoutes);
 app.use('/api/invoices', invoiceRoutes);
