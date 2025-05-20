@@ -749,6 +749,8 @@ jobs:
       - name: Create GitHub Release
         id: create_release
         if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Using version from env
           VERSION="${{ env.VERSION }}"
