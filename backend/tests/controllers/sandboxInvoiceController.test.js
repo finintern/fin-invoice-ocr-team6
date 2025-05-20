@@ -223,4 +223,42 @@ describe("Sandbox Invoice Controller", () => {
       expect(console.error).toHaveBeenCalledWith("[SANDBOX] Error in mock get invoice details:", expect.any(Error));
     });
   });
+
+  describe("mockDeleteInvoiceById", () => {
+    test("should return 200 with success message", async () => {
+      // Arrange: Set up the request with an ID
+      req.params = { id: "test-invoice-id" };
+
+      // Act: Call the controller method
+      await sandboxInvoiceController.mockDeleteInvoiceById(req, res);
+
+      // Assert: Check the response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Invoice successfully deleted",
+        id: "test-invoice-id"
+      });
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining("[SANDBOX] Mock delete invoice for ID"));
+    });
+    
+    test("should handle errors properly", async () => {
+      // Arrange: Setup to throw an error
+      req.params = { id: "test-invoice-id" };
+      
+      // Mock console.log to throw an error
+      console.log.mockImplementationOnce(() => {
+        throw new Error("Test error");
+      });
+
+      // Act: Call the controller method
+      await sandboxInvoiceController.mockDeleteInvoiceById(req, res);
+
+      // Assert: Check the response
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        message: "Error in sandbox invoice deletion"
+      }));
+      expect(console.error).toHaveBeenCalledWith("[SANDBOX] Error in mock delete invoice:", expect.any(Error));
+    });
+  });
 });
