@@ -505,12 +505,26 @@ jobs:
           # Ensure the repo is fully fetched
           git fetch --tags
 
-          # Get the previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*" || echo "v0.0.0")
+          # Check if there are any tags
+          TAG_COUNT=$(git tag -l "v[0-9]*" | wc -l)
+          
+          if [ "$TAG_COUNT" -eq 0 ]; then
+            echo "No tags found. Generating changelog for all commits."
+            PREV_TAG=""
+          else
+            # Get the latest tag
+            PREV_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*")
+          fi
+
           echo "Previous tag: $PREV_TAG"
 
-          # Generate changelog from the last tag to the current commit
-          CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s by %an")
+          # Generate changelog
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s by %an")
+          else
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s by %an")
+          fi
+
           echo "Changelog: $CHANGELOG"
           echo "CHANGELOG=$CHANGELOG" >> $GITHUB_ENV
 
