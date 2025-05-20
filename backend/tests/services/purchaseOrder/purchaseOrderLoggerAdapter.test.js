@@ -14,6 +14,10 @@ jest.mock('../../../src/utils/logger/PurchaseOrderLogger', () => {
     logAnalysisComplete: jest.fn(),
     logProcessingComplete: jest.fn(),
     logError: jest.fn(),
+    logGetByIdRequest: jest.fn(),
+    logGetByIdSuccess: jest.fn(),
+    logGetByIdNotFound: jest.fn(),
+    logGetByIdError: jest.fn(),
   };
 
   return {
