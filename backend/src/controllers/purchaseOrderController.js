@@ -235,6 +235,17 @@ class PurchaseOrderController extends FinancialDocumentController {
       });
   }
 
+  /**
+   * Validates a request to access a purchase order
+   * @param {Object} req - Express request object
+   * @param {Object} req.user - Authenticated user information
+   * @param {string} req.user.uuid - User's unique identifier
+   * @param {string} id - Purchase order ID to validate
+   * @throws {AuthError} If user is not authenticated
+   * @throws {ValidationError} If purchase order ID is missing
+   * @throws {ForbiddenError} If user doesn't have access to the purchase order
+   * @returns {Promise<void>}
+   */
   async validateGetRequest(req, id) {
     if (!req.user) {
       throw new AuthError("Unauthorized");
@@ -249,6 +260,18 @@ class PurchaseOrderController extends FinancialDocumentController {
     }
   }
 
+  /**
+   * Processes the purchase order file upload
+   * @param {Object} req - Express request object
+   * @param {Object} req.file - Uploaded file information
+   * @param {Buffer} req.file.buffer - File contents as buffer
+   * @param {string} req.file.originalname - Original filename
+   * @param {string} req.file.mimetype - File MIME type
+   * @param {Object} req.user - Authenticated user information
+   * @param {string} req.user.uuid - Partner's unique identifier
+   * @returns {Promise<Object>} Upload result containing purchase order ID and status
+   * @throws {Error} If upload processing fails
+   */
   async processUpload(req) {
     const { buffer, originalname, mimetype } = req.file;
     const partnerId = req.user.uuid;

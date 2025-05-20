@@ -30,10 +30,29 @@ class InvoiceController extends FinancialDocumentController {
     this.validateGetRequest = this.validateGetRequest.bind(this);
   }
 
+  /**
+   * Handles file upload for invoices
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   * @returns {Promise<Object>} Response with upload result
+   */
   async uploadInvoice(req, res) {
     return await this.uploadFile(req, res);
   }
 
+  /**
+   * Processes the invoice file upload
+   * @param {Object} req - Express request object
+   * @param {Object} req.file - Uploaded file information
+   * @param {Buffer} req.file.buffer - File contents as buffer
+   * @param {string} req.file.originalname - Original filename
+   * @param {string} req.file.mimetype - File MIME type
+   * @param {Object} req.user - Authenticated user information
+   * @param {string} req.user.uuid - Partner's unique identifier
+   * @param {Object} req.body - Request body parameters
+   * @returns {Promise<Object>} Upload result containing invoice ID and status
+   * @throws {Error} If upload processing fails
+   */
   async processUpload(req) {
     const { buffer, originalname, mimetype } = req.file;
     const partnerId = req.user.uuid;
@@ -96,6 +115,15 @@ class InvoiceController extends FinancialDocumentController {
     }
   }
 
+  /**
+   * Retrieves an invoice by its ID
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.id - Invoice ID
+   * @param {Object} req.user - Authenticated user information
+   * @param {Object} res - Express response object
+   * @returns {void} Response is handled in the observable subscription
+   */
   getInvoiceById(req, res) {
     const { id } = req.params;
     
@@ -116,6 +144,17 @@ class InvoiceController extends FinancialDocumentController {
     ).subscribe();
   }
 
+  /**
+   * Validates the request to fetch an invoice
+   * @param {Object} req - Express request object
+   * @param {Object} req.user - Authenticated user information
+   * @param {string} req.user.uuid - User's unique identifier
+   * @param {string} id - Invoice ID to validate
+   * @throws {AuthError} If user is not authenticated
+   * @throws {ValidationError} If invoice ID is missing
+   * @throws {ForbiddenError} If user doesn't have access to the invoice
+   * @returns {Promise<void>}
+   */
   async validateGetRequest(req, id) {
     if (!req.user) {
       throw new AuthError("Unauthorized");
@@ -155,6 +194,16 @@ class InvoiceController extends FinancialDocumentController {
   }
 
 
+  /**
+   * Deletes an invoice by its ID
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.id - Invoice ID to delete
+   * @param {Object} req.user - Authenticated user information
+   * @param {string} req.user.uuid - User's unique identifier
+   * @param {Object} res - Express response object
+   * @returns {void} Response is handled in the observable subscription
+   */
   deleteInvoiceById(req, res) {
     const { id } = req.params;
     const partnerId = req.user.uuid;
@@ -231,12 +280,28 @@ class InvoiceController extends FinancialDocumentController {
   
 }
 
-// Import dependencies for factory function
+/**
+ * Invoice service for handling invoice operations
+ * @type {Object}
+ */
 const InvoiceService = require('../services/invoice/invoiceService');
+
+/**
+ * Service for validating invoice deletion
+ * @type {Object}
+ */
 const validateDeletion = require('../services/validateDeletion');
+
+/**
+ * S3 service for file operations
+ * @type {Object}
+ */
 const s3Service = require('../services/s3Service');
 
-// Create controller instance with dependencies
+/**
+ * Pre-configured invoice controller instance
+ * @type {InvoiceController}
+ */
 const controller = new InvoiceController({
   invoiceService: InvoiceService,
   validateDeletionService: validateDeletion,
