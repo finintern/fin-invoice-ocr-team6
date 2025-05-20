@@ -126,6 +126,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/staging'|| github.ref == 'refs/heads/deployment'
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -372,8 +374,8 @@ jobs:
   deploy-blue:
     name: Deploy to Production (Blue)
     runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment-2' || github.ref == 'refs/heads/deployment'
+    needs: deploy-green
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -474,14 +476,14 @@ jobs:
         run: |
           curl -H "Content-Type: application/json" \
               -X POST \
-              -d "{\"content\": \"✅ *Deploy Blue berhasil* untuk versi \`${{ env.VERSION }}\` oleh \`${{ github.actor }}\`\"}" \
+              -d "{\"content\": \"✅ *Deploy Blue berhasil* untuk versi \`${{ needs.deploy-green.outputs.version }}\` oleh \`${{ github.actor }}\`\"}" \
               ${{ secrets.DISCORD_WEBHOOK }}
       - name: Notify Discord (Blue Deploy Failed)
         if: failure()
         run: |
           curl -H "Content-Type: application/json" \
               -X POST \
-              -d "{\"content\": \"❌ *Deploy Blue gagal* untuk versi \`${{ env.VERSION }}\` oleh \`${{ github.actor }}\`\"}" \
+              -d "{\"content\": \"❌ *Deploy Blue gagal* untuk versi \`${{ needs.deploy-green.outputs.version }}\` oleh \`${{ github.actor }}\`\"}" \
               ${{ secrets.DISCORD_WEBHOOK }}
 
 
@@ -493,14 +495,14 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{
               "deployment": {
-                "revision": "${{ env.VERSION }}",
+                "revision": "${{ needs.deploy-green.outputs.version }}",
                 "changelog": "Deployment via GitHub Actions CI/CD",
                 "description": "Blue/Green Deployment",
                 "user": "${{ github.actor }}"
               }
             }'
-
-      # FIXED CHANGELOG GENERATION
+            
+      # Generate changelog after successful blue deployment
       - name: Generate Changelog
         id: changelog
         run: |
@@ -596,26 +598,45 @@ jobs:
             FINAL_CHANGELOG+="\n...and more commits. View the full commit history in the repository."
           fi
 
-          # Write changelog to a file instead of using base64 encoding and environment variables
+          # Write changelog to a file instead of using base64 encoding
           echo -e "$FINAL_CHANGELOG" > changelog.md
           echo "Changelog written to changelog.md"
 
       - name: Create GitHub Release
+        id: create_release
         if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ env.VERSION }}"
+          # Using the version from deploy-green job
+          VERSION="${{ needs.deploy-green.outputs.version }}"
+          
+          if [[ -z "$VERSION" ]]; then
+            echo "No version output from deploy-green job. Generating a version."
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            SHORT_SHA="${GITHUB_SHA::8}"
+            VERSION="$TIMESTAMP-$SHORT_SHA"
+          fi
+          
+          # Add v prefix if not present
+          if [[ ! "$VERSION" == v* ]]; then
+            RELEASE_TAG="v$VERSION"
+          else
+            RELEASE_TAG="$VERSION"
+          fi
+          
           RELEASE_TITLE="Release $VERSION"
           
           # Read changelog from file
           CHANGELOG=$(cat changelog.md)
 
+          echo "Creating GitHub release with tag: $RELEASE_TAG"
+          
           # Create the release
-          gh release create "$VERSION" \
+          gh release create "$RELEASE_TAG" \
           --title "$RELEASE_TITLE" \
-          --notes "$CHANGELOG"
-
+          --notes "$CHANGELOG" \
+          --target "${{ github.ref_name }}"
           
   functional-test:
     name: Run Functional Tests
