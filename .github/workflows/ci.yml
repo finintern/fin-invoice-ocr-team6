@@ -131,7 +131,7 @@ jobs:
     name: Deploy to Green Environment
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/staging'|| github.ref == 'refs/heads/deployment'|| github.ref == 'refs/heads/deployment-2'
+    if: github.ref == 'refs/heads/staging'
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
@@ -376,12 +376,93 @@ jobs:
               -d "{\"content\": \"❌ *Deploy Green gagal* di branch \`${{ github.ref_name }}\` oleh \`${{ github.actor }}\`\"}" \
               ${{ secrets.DISCORD_WEBHOOK }}
 
+  functional-test:
+    name: Run Functional Tests on Green Environment
+    runs-on: ubuntu-latest
+    needs: deploy-green
+    if: github.ref == 'refs/heads/staging'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Install Newman and htmlextra
+        run: |
+          npm install -g newman
+          npm install -g newman-reporter-htmlextra
+
+      - name: Check for test files
+        run: |
+          ls -la functional_test_files/
+          if [ ! -f functional_test_files/functional-test.json ]; then
+            echo "Error: functional-test.json not found in functional_test_files directory"
+            exit 1
+          fi
+
+      - name: Create staging-environment.json from secret
+        run: |
+          # Create JSON environment with Green environment URL (port 3005)
+          echo '${{ secrets.STAGING_ENVIRONMENT_JSON }}' | 
+          sed 's/"url": "http:\/\/localhost:3000"/"url": "http:\/\/localhost:3005"/' > functional_test_files/staging-environment.json
+
+      - name: Verify environment file
+        run: |
+          if [ ! -f functional_test_files/staging-environment.json ]; then
+            echo "Error: staging-environment.json not created properly"
+            exit 1
+          fi
+          echo "Environment file created successfully"
+          
+      - name: Create reports directory
+        working-directory: functional_test_files
+        run: mkdir -p reports
+
+      - name: Run Functional Tests with htmlextra against Green Environment
+        working-directory: functional_test_files
+        run: |
+          echo "Starting Newman tests against Green environment (port 3005)..."
+          newman run functional-test.json -e staging-environment.json -r htmlextra --reporter-htmlextra-skipSensitiveData --reporter-htmlextra-export ./reports/functional-test-report.html || {
+            echo "Newman tests failed with exit code $?"
+            if [ -f ./reports/functional-test-report.html ]; then
+              echo "Test report was generated despite failure"
+            else
+              echo "No test report was generated"
+            fi
+            exit 1
+          }
+          echo "Newman tests completed successfully on Green environment"
+      - name: Notify Discord (Functional Test Success)
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"✅ *Functional test berhasil pada Green Environment* untuk versi \`${{ needs.deploy-green.outputs.version || 'unknown' }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Notify Discord (Functional Test Failed)
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"❌ *Functional test gagal pada Green Environment* untuk versi \`${{ needs.deploy-green.outputs.version || 'unknown' }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Upload Functional Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-test-report-green
+          path: functional_test_files/reports/functional-test-report.html
 
   deploy-blue:
     name: Deploy to Production (Blue)
     runs-on: ubuntu-latest
-    needs: deploy-green
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment' || github.ref == 'refs/heads/deployment-2'
+    needs: functional-test
+    if: github.ref == 'refs/heads/staging'
     permissions:
       contents: write # Add explicit permission to create releases
     steps:
@@ -775,82 +856,3 @@ jobs:
           --title "$RELEASE_TITLE" \
           --notes "$CHANGELOG" \
           --target "${{ github.ref_name }}"
-          
-  functional-test:
-    name: Run Functional Tests
-    runs-on: ubuntu-latest
-    needs: deploy-blue
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment' || github.ref == 'refs/heads/deployment-2'
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-
-      - name: Install Newman and htmlextra
-        run: |
-          npm install -g newman
-          npm install -g newman-reporter-htmlextra
-
-      - name: Check for test files
-        run: |
-          ls -la functional_test_files/
-          if [ ! -f functional_test_files/functional-test.json ]; then
-            echo "Error: functional-test.json not found in functional_test_files directory"
-            exit 1
-          fi
-
-      - name: Create staging-environment.json from secret
-        run: echo '${{ secrets.STAGING_ENVIRONMENT_JSON }}' > functional_test_files/staging-environment.json
-
-      - name: Verify environment file
-        run: |
-          if [ ! -f functional_test_files/staging-environment.json ]; then
-            echo "Error: staging-environment.json not created properly"
-            exit 1
-          fi
-          echo "Environment file created successfully"
-          
-      - name: Create reports directory
-        working-directory: functional_test_files
-        run: mkdir -p reports
-
-      - name: Run Functional Tests with htmlextra
-        working-directory: functional_test_files
-        run: |
-          echo "Starting Newman tests..."
-          newman run functional-test.json -e staging-environment.json -r htmlextra --reporter-htmlextra-skipSensitiveData --reporter-htmlextra-export ./reports/functional-test-report.html || {
-            echo "Newman tests failed with exit code $?"
-            if [ -f ./reports/functional-test-report.html ]; then
-              echo "Test report was generated despite failure"
-            else
-              echo "No test report was generated"
-            fi
-            exit 1
-          }
-          echo "Newman tests completed successfully"
-      - name: Notify Discord (Functional Test Success)
-        if: success()
-        run: |
-          curl -H "Content-Type: application/json" \
-              -X POST \
-              -d "{\"content\": \"✅ *Functional test berhasil* untuk versi \`${{ needs.deploy-green.outputs.version || 'unknown' }}\`\"}" \
-              ${{ secrets.DISCORD_WEBHOOK }}
-
-      - name: Notify Discord (Functional Test Failed)
-        if: failure()
-        run: |
-          curl -H "Content-Type: application/json" \
-              -X POST \
-              -d "{\"content\": \"❌ *Functional test gagal* untuk versi \`${{ needs.deploy-green.outputs.version || 'unknown' }}\`\"}" \
-              ${{ secrets.DISCORD_WEBHOOK }}
-
-      - name: Upload Functional Test Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: functional-test-report
-          path: functional_test_files/reports/functional-test-report.html
