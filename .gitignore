@@ -4,6 +4,10 @@ node_modules
 .vscode
 Caddyfile
 
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
 # Profiling results
 .clinic
 profiling-results/

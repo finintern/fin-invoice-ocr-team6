@@ -4,3 +4,8 @@ node_modules
 coverage
 logs
 newman
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
