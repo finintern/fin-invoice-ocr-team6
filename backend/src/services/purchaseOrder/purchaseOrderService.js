@@ -12,7 +12,7 @@ const { AzurePurchaseOrderMapper } = require('../purchaseOrderMapperService/purc
 const DocumentStatus = require('../../models/enums/DocumentStatus');
 const PurchaseOrderLogger = require('./purchaseOrderLogger');
 const { NotFoundError } = require('../../utils/errors');
-const { from } = require('rxjs');
+const { from, of, throwError, forkJoin} = require('rxjs');
 const { catchError, map, switchMap } = require('rxjs/operators');
 
 class PurchaseOrderService extends FinancialDocumentService {
@@ -229,45 +229,46 @@ class PurchaseOrderService extends FinancialDocumentService {
     return this.documentAnalyzer.analyzeDocument(documentUrl);
   }
 
-  async getPurchaseOrderById(id) {
-    try {
-      const purchaseOrder = await this.purchaseOrderRepository.findById(id);
+  getPurchaseOrderById(id) {
+    return from(this.purchaseOrderRepository.findById(id)).pipe(
+      switchMap((purchaseOrder) => {
+        if (!purchaseOrder) {
+          return throwError(() => new Error("Purchase order not found"));
+        }
 
-      // Return early with appropriate message for PROCESSING and FAILED states
-      if (purchaseOrder.status === DocumentStatus.PROCESSING) {
-        return {
-          message: "Purchase order is still being processed. Please try again later.",
-          data: { documents: [] }
-        };
-      }
+        if (purchaseOrder.status === DocumentStatus.PROCESSING) {
+          return of({
+            message: "Purchase order is still being processed. Please try again later.",
+            data: { documents: [] }
+          });
+        }
 
-      if (purchaseOrder.status === DocumentStatus.FAILED) {
-        return {
-          message: "Purchase order processing failed. Please re-upload the document.",
-          data: { documents: [] }
-        };
-      }
+        if (purchaseOrder.status === DocumentStatus.FAILED) {
+          return of({
+            message: "Purchase order processing failed. Please re-upload the document.",
+            data: { documents: [] }
+          });
+        }
 
-      // Fetch related data for ANALYZED purchase orders
-      const items = await this.itemRepository.findItemsByDocumentId(id, 'PurchaseOrder');
+        const items$ = from(this.itemRepository.findItemsByDocumentId(id, 'PurchaseOrder'));
+        const customer$ = purchaseOrder.customer_id
+          ? from(this.customerRepository.findById(purchaseOrder.customer_id))
+          : of(null);
+        const vendor$ = purchaseOrder.vendor_id
+          ? from(this.vendorRepository.findById(purchaseOrder.vendor_id))
+          : of(null);
 
-      // Get customer data if available
-      let customer = null;
-      if (purchaseOrder.customer_id) {
-        customer = await this.customerRepository.findById(purchaseOrder.customer_id);
-      }
-
-      // Get vendor data if available
-      let vendor = null;
-      if (purchaseOrder.vendor_id) {
-        vendor = await this.vendorRepository.findById(purchaseOrder.vendor_id);
-      }
-
-      return this.responseFormatter.formatPurchaseOrderResponse(purchaseOrder, items, customer, vendor);
-    } catch (error) {
-      console.error("Error retrieving purchase order:", error);
-      throw error;
-    }
+        return forkJoin({ items: items$, customer: customer$, vendor: vendor$ }).pipe(
+          map(({ items, customer, vendor }) => {
+            return this.responseFormatter.formatPurchaseOrderResponse(purchaseOrder, items, customer, vendor);
+          })
+        );
+      }),
+      catchError((error) => {
+        console.error("Error retrieving purchase order:", error);
+        return throwError(() => error);
+      })
+    );
   }
 
   /**

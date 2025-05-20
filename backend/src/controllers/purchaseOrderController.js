@@ -2,10 +2,11 @@ const purchaseOrderService = require("../services/purchaseOrder/purchaseOrderSer
 const FinancialDocumentController = require('./financialDocumentController');
 const Sentry = require("../instrument");
 const { ValidationError, AuthError, ForbiddenError, NotFoundError } = require('../utils/errors');
-const { from, of, throwError } = require('rxjs');
-const { catchError, mergeMap, tap } = require('rxjs/operators');
+const { from, of, throwError, EMPTY } = require('rxjs');
+const { catchError, mergeMap, tap, switchMap, map } = require('rxjs/operators');
 const validateDeletionService = require('../services/validateDeletion');
 const s3Service = require('../services/s3Service');
+
 const PurchaseOrderLogger = require('../services/purchaseOrder/purchaseOrderLogger');
 
 class PurchaseOrderController extends FinancialDocumentController {
@@ -63,21 +64,25 @@ class PurchaseOrderController extends FinancialDocumentController {
    * @throws {404} Not Found if purchase order is not found
    * @throws {500} Internal Server Error 
    */
-  async getPurchaseOrderById(req, res) {
-    try {
-      const { id } = req.params;
-      await this.validateGetRequest(req, id);
-      const purchaseOrderDetail = await this.purchaseOrderService.getPurchaseOrderById(id);
-      
-      if (!purchaseOrderDetail) {
-        throw new NotFoundError("Purchase order not found");
-      }
-      
-      return res.status(200).json(purchaseOrderDetail);
-    } catch (error) {
-      return this.handleError(res, error);
-    }
+  getPurchaseOrderById(req, res) {
+    const { id } = req.params;
+
+    from(this.validateGetRequest(req, id)).pipe(
+      switchMap(() => from(this.purchaseOrderService.getPurchaseOrderById(id))),
+        map((purchaseOrderDetail) => {
+          if (!purchaseOrderDetail) {
+            return res.status(404).json({ message: "Purchase order not found" });
+          }
+
+          return res.status(200).json(purchaseOrderDetail);
+        }),
+        catchError((error) => {
+          this.handleError(res, error);
+          return EMPTY;
+        })
+    ).subscribe();
   }
+
 
   /**
    * @description Retrieves only the status of a purchase order by ID
@@ -235,6 +240,17 @@ class PurchaseOrderController extends FinancialDocumentController {
       });
   }
 
+  /**
+   * Validates a request to access a purchase order
+   * @param {Object} req - Express request object
+   * @param {Object} req.user - Authenticated user information
+   * @param {string} req.user.uuid - User's unique identifier
+   * @param {string} id - Purchase order ID to validate
+   * @throws {AuthError} If user is not authenticated
+   * @throws {ValidationError} If purchase order ID is missing
+   * @throws {ForbiddenError} If user doesn't have access to the purchase order
+   * @returns {Promise<void>}
+   */
   async validateGetRequest(req, id) {
     if (!req.user) {
       throw new AuthError("Unauthorized");
@@ -249,6 +265,18 @@ class PurchaseOrderController extends FinancialDocumentController {
     }
   }
 
+  /**
+   * Processes the purchase order file upload
+   * @param {Object} req - Express request object
+   * @param {Object} req.file - Uploaded file information
+   * @param {Buffer} req.file.buffer - File contents as buffer
+   * @param {string} req.file.originalname - Original filename
+   * @param {string} req.file.mimetype - File MIME type
+   * @param {Object} req.user - Authenticated user information
+   * @param {string} req.user.uuid - Partner's unique identifier
+   * @returns {Promise<Object>} Upload result containing purchase order ID and status
+   * @throws {Error} If upload processing fails
+   */
   async processUpload(req) {
     const { buffer, originalname, mimetype } = req.file;
     const partnerId = req.user.uuid;
