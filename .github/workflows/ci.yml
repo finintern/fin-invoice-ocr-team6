@@ -494,6 +494,32 @@ jobs:
                 "user": "${{ github.actor }}"
               }
             }'
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*" || echo "v0.0.0")
+          echo "Previous tag: $PREV_TAG"
+
+          # Generate changelog from the last tag to the current commit
+          CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s by %an")
+          echo "Changelog: $CHANGELOG"
+          echo "CHANGELOG=$CHANGELOG" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ env.VERSION }}"
+          RELEASE_TITLE="Release $VERSION"
+          CHANGELOG="${{ env.CHANGELOG }}"
+
+          # Create the release
+          gh release create "$VERSION" \
+          --title "$RELEASE_TITLE" \
+          --notes "$CHANGELOG"
+
           
   functional-test:
     name: Run Functional Tests
