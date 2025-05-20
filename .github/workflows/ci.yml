@@ -147,15 +147,16 @@ jobs:
         env:
           NODE_ENV: staging
 
-      - name: Generate Version ID
+      - name: Generate Combined Version (package.json + commit)
+        working-directory: backend
+        id: get_version
         run: |
-          VERSION=$(date +'%Y%m%d%H%M%S')-${GITHUB_SHA::8}
+          BASE_VERSION=$(jq -r .version package.json)
+          VERSION="$BASE_VERSION-${GITHUB_SHA::8}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "🏷️ Generated Version ID: $VERSION"
-          echo "📝 Details:"
-          echo "   - Branch: ${{ github.ref_name }}"
-          echo "   - Commit: ${GITHUB_SHA::8}"
-          echo "   - Timestamp: $(date +'%Y%m%d%H%M%S')"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "🏷️ Combined Version: $VERSION"
+
 
       - name: Install SSH client
         run: sudo apt-get install openssh-client
@@ -359,6 +360,15 @@ jobs:
             fi
           '
 
+      - name: Notify Discord (Green Deploy Failed)
+        if: steps.verify-green.outcome == 'failure'
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"❌ *Deploy Green gagal* di branch \`${{ github.ref_name }}\` oleh \`${{ github.actor }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
+
+
   deploy-blue:
     name: Deploy to Production (Blue)
     runs-on: ubuntu-latest
@@ -454,7 +464,22 @@ jobs:
               exit 1
             fi
           '
-          
+      - name: Notify Discord (Blue Deploy Success)
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"✅ *Deploy Blue berhasil* untuk versi \`${{ env.VERSION }}\` oleh \`${{ github.actor }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Notify Discord (Blue Deploy Failed)
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"❌ *Deploy Blue gagal* untuk versi \`${{ env.VERSION }}\` oleh \`${{ github.actor }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
+
+
       - name: Notify New Relic of Deployment
         if: success()
         run: |
@@ -525,6 +550,21 @@ jobs:
             exit 1
           }
           echo "Newman tests completed successfully"
+      - name: Notify Discord (Functional Test Success)
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"✅ *Functional test berhasil* untuk versi \`${{ needs.deploy-green.outputs.version || 'unknown' }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Notify Discord (Functional Test Failed)
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"❌ *Functional test gagal* untuk versi \`${{ needs.deploy-green.outputs.version || 'unknown' }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
 
       - name: Upload Functional Test Report
         if: always()
@@ -532,3 +572,4 @@ jobs:
         with:
           name: functional-test-report
           path: functional_test_files/reports/functional-test-report.html
+      
