@@ -520,13 +520,84 @@ jobs:
 
           # Generate changelog
           if [ -z "$PREV_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s by %an")
+            CHANGELOG=$(git log --pretty=format:"%s by %an")
           else
-            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s by %an")
+            CHANGELOG=$(git log "${PREV_TAG}"..HEAD --pretty=format:"%s by %an")
           fi
 
-          echo "Changelog: $CHANGELOG"
-          echo "CHANGELOG=$CHANGELOG" >> $GITHUB_ENV
+          # Initialize grouped changelog
+          CHORE=""
+          FIX=""
+          CONFIG=""
+          GREEN=""
+          OTHER=""
+
+          # Max lines limit
+          MAX_LINES=20
+          LINE_COUNT=0
+
+          # Group changelog
+          while read -r line; do
+            if [ $LINE_COUNT -ge $MAX_LINES ]; then
+              break
+            fi
+
+            COMMIT_TYPE=$(echo "$line" | grep -Eo "^\[(CHORE|FIX|CONFIG|GREEN|chore|fix|config|green)\]" | tr '[:lower:]' '[:upper:]')
+
+            case "$COMMIT_TYPE" in
+              "[CHORE]")
+                CHORE+="$line\n"
+                ;;
+              "[FIX]")
+                FIX+="$line\n"
+                ;;
+              "[CONFIG]")
+                CONFIG+="$line\n"
+                ;;
+              "[GREEN]")
+                GREEN+="$line\n"
+                ;;
+              *)
+                OTHER+="$line\n"
+                ;;
+            esac
+
+            LINE_COUNT=$((LINE_COUNT + 1))
+
+          done <<< "$CHANGELOG"
+
+          # Construct the final changelog
+          FINAL_CHANGELOG=""
+
+          if [ -n "$CHORE" ]; then
+            FINAL_CHANGELOG+="### 🛠️ Chore Updates\n$CHORE\n"
+          fi
+
+          if [ -n "$FIX" ]; then
+            FINAL_CHANGELOG+="### 🐛 Bug Fixes\n$FIX\n"
+          fi
+
+          if [ -n "$CONFIG" ]; then
+            FINAL_CHANGELOG+="### 🔧 Configurations\n$CONFIG\n"
+          fi
+
+          if [ -n "$GREEN" ]; then
+            FINAL_CHANGELOG+="### 🌱 Green Environment Updates\n$GREEN\n"
+          fi
+
+          if [ -n "$OTHER" ]; then
+            FINAL_CHANGELOG+="### 📦 Other Commits\n$OTHER\n"
+          fi
+
+          # Add a notice if the changelog is truncated
+          if [ $LINE_COUNT -eq $MAX_LINES ]; then
+            FINAL_CHANGELOG+="\n...and more commits. View the full commit history in the repository."
+          fi
+
+          # Encode the changelog using base64 to handle special characters
+          ENCODED_CHANGELOG=$(echo -e "$FINAL_CHANGELOG" | base64)
+          echo "Encoded Changelog: $ENCODED_CHANGELOG"
+          echo "CHANGELOG=$ENCODED_CHANGELOG" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         if: success()
