@@ -33,16 +33,6 @@ const options = {
               type: 'string',
               enum: ['Processing', 'Analyzed', 'Failed'],
               example: 'Analyzed'
-            },
-            created_at: {
-              type: 'string',
-              format: 'date-time',
-              example: '2023-01-15T08:30:00.000Z'
-            },
-            updated_at: {
-              type: 'string',
-              format: 'date-time',
-              example: '2023-01-15T08:30:00.000Z'
             }
           }
         },
@@ -96,12 +86,11 @@ const options = {
         PurchaseOrder: {
           type: 'object',
           properties: {
-            id: {
+            message: {
               type: 'string',
-              format: 'uuid',
-              example: '123e4567-e89b-12d3-a456-426614174000'
+              example: 'Purchase order upload processed'
             },
-            partner_id: {
+            id: {
               type: 'string',
               format: 'uuid',
               example: '123e4567-e89b-12d3-a456-426614174001'
@@ -111,60 +100,6 @@ const options = {
               enum: ['Processing', 'Analyzed', 'Failed'],
               example: 'Analyzed'
             },
-            invoice_number: {
-              type: 'string',
-              example: 'INV-0013'
-            },
-            invoice_date: {
-              type: 'string',
-              format: 'date',
-              example: '1987-01-12'
-            },
-            billing_company: {
-              type: 'string',
-              example: 'Quisque porta volutpat erat'
-            },
-            billing_address: {
-              type: 'string',
-              example: '9 Glendale Court, Nashville, Tennessee, 37205, United States'
-            },
-            shipping_name: {
-              type: 'string',
-              example: 'Bobbe Rafter'
-            },
-            shipping_address: {
-              type: 'string',
-              example: '9 Glendale Court, Nashville, Tennessee, 37205, United States'
-            },
-            items: {
-              type: 'array',
-              items: {
-                $ref: '#/components/schemas/PurchaseOrderItem'
-              }
-            },
-            total_amount: {
-              type: 'number',
-              format: 'float',
-              example: 52.00
-            },
-            file_url: {
-              type: 'string',
-              example: 'https://mock-s3-bucket.s3.amazonaws.com/123e4567-e89b-12d3-a456-426614174000.pdf'
-            },
-            analysis_url: {
-              type: 'string',
-              example: 'https://mock-s3-bucket.s3.amazonaws.com/analysis/123e4567-e89b-12d3-a456-426614174000-analysis.json'
-            },
-            created_at: {
-              type: 'string',
-              format: 'date-time',
-              example: '2023-01-15T08:30:00.000Z'
-            },
-            updated_at: {
-              type: 'string',
-              format: 'date-time',
-              example: '2023-01-15T08:30:00.000Z'
-            }          
           }
         },
         InvoiceItem: {
