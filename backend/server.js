@@ -1,3 +1,13 @@
+
+if (process.env.NEW_RELIC_ENABLED === 'true') {
+    if (process.env.NEW_RELIC_APP_NAME && process.env.NEW_RELIC_LICENSE_KEY) {
+        console.log(`Initializing New Relic with app name: ${process.env.NEW_RELIC_APP_NAME}`);
+        require('newrelic');
+    } else {
+        console.log('New Relic environment variables missing. Skipping New Relic initialization.');
+    }
+}
+
 const http = require('http');
 const Sentry = require("./src/instrument.js");
 const app = require("./src/app");

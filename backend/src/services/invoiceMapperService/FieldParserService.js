@@ -55,28 +55,18 @@ class FieldParser {
         if (dateRegex.test(dateStr)) {
             const [, first, second, year] = dateRegex.exec(dateStr);
             
-            // Determine if it's dd/mm/yyyy or mm/dd/yyyy
-            // If first number is > 12, assume dd/mm/yyyy
-            // If second number is > 12, assume mm/dd/yyyy
-            // Otherwise, default to dd/mm/yyyy format
-            
+            // Determine date format based on number values
             const firstNum = parseInt(first, 10);
             const secondNum = parseInt(second, 10);
             
-            let day, month;
+            // Default to dd/mm/yyyy format unless clear case for mm/dd/yyyy
+            let day = first;
+            let month = second;
             
-            if (firstNum > 12 && secondNum <= 12) {
-                // dd/mm/yyyy format
-                day = first;
-                month = second;
-            } else if (firstNum <= 12 && secondNum > 12) {
-                // mm/dd/yyyy format
+            // Only change from default if clearly mm/dd/yyyy format
+            if (firstNum <= 12 && secondNum > 12) {
                 month = first;
                 day = second;
-            } else {
-                // Ambiguous case, default to dd/mm/yyyy
-                day = first;
-                month = second;
             }
             
             const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
