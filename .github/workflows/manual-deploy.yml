@@ -1,134 +1,44 @@
-name: Node.js CI/CD Pipeline with Blue-Green Deployment
+name: Manual Blue-Green Deployment & Rollback
 
 on:
-  push:
-    branches:
-      - "**"
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose action to perform"
+        required: true
+        default: "deploy"
+        type: choice
+        options:
+          - deploy
+          - rollback
+      environment:
+        description: "Target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+      branch:
+        description: "Branch to deploy (only for deploy action)"
+        required: false
+        default: "staging"
+        type: string
+      rollback_version:
+        description: "Version to rollback to (only for rollback action)"
+        required: false
+        type: string
 
 jobs:
-  build:
-    name: Build Node.js App
+  deploy:
+    name: Deploy Application (Blue-Green)
     runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'deploy'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v3
         with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install Dependencies
-        working-directory: backend
-        run: npm install
-
-      - name: Set up environment variables
-        run: |
-          echo "AZURE_ENDPOINT=${{ secrets.AZURE_ENDPOINT }}" >> $GITHUB_ENV
-          echo "AZURE_KEY=${{ secrets.AZURE_KEY }}" >> $GITHUB_ENV
-          echo "AZURE_INVOICE_MODEL=${{ secrets.AZURE_INVOICE_MODEL }}" >> $GITHUB_ENV
-          echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> $GITHUB_ENV
-          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
-          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> $GITHUB_ENV
-
-      - name: Build Application
-        working-directory: backend
-        run: npm run build
-        env:
-          NODE_ENV: ${{ secrets.NODE_ENV }}
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: backend/dist/
-
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install Dependencies
-        working-directory: backend
-        run: npm install
-
-      - name: Set up environment variables
-        run: |
-          echo "AZURE_ENDPOINT=${{ secrets.AZURE_ENDPOINT }}" >> $GITHUB_ENV
-          echo "AZURE_KEY=${{ secrets.AZURE_KEY }}" >> $GITHUB_ENV
-          echo "AZURE_INVOICE_MODEL=${{ secrets.AZURE_INVOICE_MODEL }}" >> $GITHUB_ENV
-          echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> $GITHUB_ENV
-          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
-          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> $GITHUB_ENV
-
-      - name: Run Linter
-        working-directory: backend
-        run: npm run lint
-
-      - name: Run Tests with Coverage
-        working-directory: backend
-        run: npm test -- --coverage 
-        env:
-          NODE_ENV: ${{ secrets.NODE_ENV }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          AZURE_ENDPOINT: ${{ secrets.AZURE_ENDPOINT }}
-          AZURE_KEY: ${{ secrets.AZURE_KEY }}
-          AZURE_INVOICE_MODEL: ${{ secrets.AZURE_INVOICE_MODEL }}
-          AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./backend/coverage
-          fail_ci_if_error: true  
-          verbose: true  
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-      
-      - name: Display Codecov link
-        run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          REPO_NAME="${{ github.repository }}"
-          echo "Code Coverage Report: https://codecov.io/gh/${REPO_NAME}/branch/${BRANCH_NAME}"
-
-  deploy-green:
-    name: Deploy to Green Environment
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment-2' || github.ref == 'refs/heads/deployment'
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+          ref: ${{ github.event.inputs.branch }}
 
       - name: Set up Node.js 20
         uses: actions/setup-node@v3
@@ -145,7 +55,7 @@ jobs:
         working-directory: backend
         run: npm run build
         env:
-          NODE_ENV: staging
+          NODE_ENV: ${{ github.event.inputs.environment }}
 
       - name: Generate Version ID
         run: |
@@ -166,14 +76,14 @@ jobs:
       - name: Update SSH Key Permission
         run: chmod 400 ssh-key.pem
 
-      - name: Set up Staging Environment Variables
+      - name: Set up Environment Variables
         run: |
           echo "DB_USER=${{ secrets.DB_USER }}" >> .env
           echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
           echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
-          echo "NODE_ENV=staging" >> .env
+          echo "NODE_ENV=${{ github.event.inputs.environment }}" >> .env
           echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> .env
           echo "CLIENT_SECRET=${{ secrets.CLIENT_SECRET }}" >> .env
           echo "AZURE_ENDPOINT=${{ secrets.AZURE_ENDPOINT }}" >> .env
@@ -186,49 +96,6 @@ jobs:
           echo "DSN=${{ secrets.DSN }}" >> .env
           echo "NEW_RELIC_LICENSE_KEY=${{ secrets.NEW_RELIC_LICENSE_KEY }}" >> .env
           echo "NEW_RELIC_ENABLED=true" >> .env
-
-      - name: Setup Directory Structure
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
-            # Create necessary directories if they don't exist
-            mkdir -p ~/fin-invoice-ocr-team6/releases
-            mkdir -p ~/fin-invoice-ocr-team6/backups
-            mkdir -p ~/fin-invoice-ocr-team6/shared
-            mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
-            mkdir -p ~/fin-invoice-ocr-team6/db_backups
-            mkdir -p ~/fin-invoice-ocr-team6/environments/green/current/backend
-            mkdir -p ~/fin-invoice-ocr-team6/environments/blue/current/backend
-          "
-      
-      - name: Create Database Backup
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
-            # Load environment variables
-            source ~/fin-invoice-ocr-team6/shared/.env
-            
-            # Create DB backup directory
-            mkdir -p ~/fin-invoice-ocr-team6/db_backups
-            
-            echo "Creating MySQL database backup..."
-            
-            # Create MySQL backup with timestamp
-            BACKUP_FILE=~/fin-invoice-ocr-team6/db_backups/backup-$(date +%Y%m%d%H%M%S).sql
-            mysqldump -h $DB_HOST -P $DB_PORT -u $DB_USER -p$DB_PASSWORD $DB_NAME > $BACKUP_FILE
-            
-            if [ $? -eq 0 ]; then
-              echo "MySQL backup completed successfully: $BACKUP_FILE"
-              ls -lh $BACKUP_FILE
-            else
-              echo "MySQL backup failed!"
-            fi
-            
-            # Keep only last 5 backups
-            find ~/fin-invoice-ocr-team6/db_backups -name "backup-*.sql" -type f | sort -r | tail -n +6 | xargs rm -f 2>/dev/null || true
-          '
-
-      - name: Copy Environment File to Server
-        run: |
-          scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
 
       - name: Create New Relic Configuration
         run: |
@@ -261,9 +128,61 @@ jobs:
             }
           }
           EOF
-          
-          # Upload to server
+
+      - name: Setup Directory Structure
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
+            # Create necessary directories if they don't exist
+            mkdir -p ~/fin-invoice-ocr-team6/releases
+            mkdir -p ~/fin-invoice-ocr-team6/backups
+            mkdir -p ~/fin-invoice-ocr-team6/shared
+            mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
+            mkdir -p ~/fin-invoice-ocr-team6/db_backups
+            mkdir -p ~/fin-invoice-ocr-team6/environments/green/current/backend
+            mkdir -p ~/fin-invoice-ocr-team6/environments/blue/current/backend
+          "
+
+      - name: Create Database Backup
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Load environment variables
+            source ~/fin-invoice-ocr-team6/shared/.env || true
+            
+            # Create DB backup directory
+            mkdir -p ~/fin-invoice-ocr-team6/db_backups
+            
+            echo "Creating MySQL database backup..."
+            
+            # Create MySQL backup with timestamp
+            BACKUP_FILE=~/fin-invoice-ocr-team6/db_backups/backup-$(date +%Y%m%d%H%M%S).sql
+            mysqldump -h $DB_HOST -P $DB_PORT -u $DB_USER -p$DB_PASSWORD $DB_NAME > $BACKUP_FILE
+            
+            if [ $? -eq 0 ]; then
+              echo "MySQL backup completed successfully: $BACKUP_FILE"
+              ls -lh $BACKUP_FILE
+            else
+              echo "MySQL backup failed!"
+            fi
+            
+            # Keep only last 5 backups
+            find ~/fin-invoice-ocr-team6/db_backups -name "backup-*.sql" -type f | sort -r | tail -n +6 | xargs rm -f 2>/dev/null || true
+          '
+
+      - name: Copy Environment File and NewRelic Config to Server
+        run: |
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
           scp -o StrictHostKeyChecking=no -i ssh-key.pem newrelic.js ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/newrelic.js
+
+      - name: Copy Rollback Script to Server
+        run: |
+          # Copy rollback script from the repository to the server
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem backend/scripts/bg-rollback.sh ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/bg-rollback.sh
+
+          # Make it executable
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            chmod +x ~/fin-invoice-ocr-team6/bg-rollback.sh
+            echo "Blue-Green rollback script uploaded and made executable"
+          '
 
       - name: Create Release Version
         run: |
@@ -273,7 +192,7 @@ jobs:
             
             # Clone repo into the new release directory
             cd ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
-            git clone --depth 1 -b ${{ github.ref_name }} https://github.com/${{ github.repository }} .
+            git clone --depth 1 -b ${{ github.event.inputs.branch }} https://github.com/${{ github.repository }} .
             
             # Install dependencies and build in release directory
             cd backend
@@ -291,13 +210,13 @@ jobs:
             ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
             
             # Run migrations
-            npx sequelize-cli db:migrate --env staging
+            npx sequelize-cli db:migrate --env ${{ github.event.inputs.environment }}
             
             # Create release metadata file
             echo "{
               \"version\": \"${{ env.VERSION }}\",
               \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",
-              \"branch\": \"${{ github.ref_name }}\",
+              \"branch\": \"${{ github.event.inputs.branch }}\",
               \"commit\": \"${{ github.sha }}\",
               \"actor\": \"${{ github.actor }}\"
             }" > ../release.json
@@ -358,21 +277,6 @@ jobs:
               exit 1
             fi
           '
-
-  deploy-blue:
-    name: Deploy to Production (Blue)
-    runs-on: ubuntu-latest
-    needs: deploy-green
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/deployment-2' || github.ref == 'refs/heads/deployment'
-    steps:
-      - name: Install SSH client
-        run: sudo apt-get install openssh-client
-
-      - name: Create SSH Key
-        run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
-
-      - name: Update SSH Key Permission
-        run: chmod 400 ssh-key.pem
 
       - name: Deploy to Blue Environment
         run: |
@@ -454,7 +358,7 @@ jobs:
               exit 1
             fi
           '
-          
+
       - name: Notify New Relic of Deployment
         if: success()
         run: |
@@ -464,71 +368,203 @@ jobs:
             -d '{
               "deployment": {
                 "revision": "${{ env.VERSION }}",
-                "changelog": "Deployment via GitHub Actions CI/CD",
+                "changelog": "Manual Deployment via GitHub Actions",
                 "description": "Blue/Green Deployment",
                 "user": "${{ github.actor }}"
               }
             }'
-          
-  functional-test:
-    name: Run Functional Tests
+
+  rollback:
+    name: Rollback Application (Blue-Green)
     runs-on: ubuntu-latest
-    needs: deploy-blue
+    if: github.event.inputs.action == 'rollback'
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Install SSH client
+        run: sudo apt-get install openssh-client
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
+      - name: Create SSH Key
+        run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
 
-      - name: Install Newman and htmlextra
+      - name: Update SSH Key Permission
+        run: chmod 400 ssh-key.pem
+
+      - name: List Available Versions
         run: |
-          npm install -g newman
-          npm install -g newman-reporter-htmlextra
-
-      - name: Check for test files
-        run: |
-          ls -la functional_test_files/
-          if [ ! -f functional_test_files/functional-test.json ]; then
-            echo "Error: functional-test.json not found in functional_test_files directory"
-            exit 1
-          fi
-
-      - name: Create staging-environment.json from secret
-        run: echo '${{ secrets.STAGING_ENVIRONMENT_JSON }}' > functional_test_files/staging-environment.json
-
-      - name: Verify environment file
-        run: |
-          if [ ! -f functional_test_files/staging-environment.json ]; then
-            echo "Error: staging-environment.json not created properly"
-            exit 1
-          fi
-          echo "Environment file created successfully"
-          
-      - name: Create reports directory
-        working-directory: functional_test_files
-        run: mkdir -p reports
-
-      - name: Run Functional Tests with htmlextra
-        working-directory: functional_test_files
-        run: |
-          echo "Starting Newman tests..."
-          newman run functional-test.json -e staging-environment.json -r htmlextra --reporter-htmlextra-skipSensitiveData --reporter-htmlextra-export ./reports/functional-test-report.html || {
-            echo "Newman tests failed with exit code $?"
-            if [ -f ./reports/functional-test-report.html ]; then
-              echo "Test report was generated despite failure"
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Available releases:"
+            ls -la ~/fin-invoice-ocr-team6/releases/ | grep -E "^d" | awk "{print \$9}" | grep -v "^\." | sort -r
+            echo ""
+            echo "Current Blue version:"
+            if [ -e ~/fin-invoice-ocr-team6/environments/blue/current ]; then
+              if [ -f ~/fin-invoice-ocr-team6/environments/blue/current/release.json ]; then
+                cat ~/fin-invoice-ocr-team6/environments/blue/current/release.json
+              fi
             else
-              echo "No test report was generated"
+              echo "No current Blue deployment found"
             fi
-            exit 1
-          }
-          echo "Newman tests completed successfully"
+            echo ""
+            echo "Current Green version:"
+            if [ -e ~/fin-invoice-ocr-team6/environments/green/current ]; then
+              if [ -f ~/fin-invoice-ocr-team6/environments/green/current/release.json ]; then
+                cat ~/fin-invoice-ocr-team6/environments/green/current/release.json
+              fi
+            else
+              echo "No current Green deployment found"
+            fi
+          '
 
-      - name: Upload Functional Test Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: functional-test-report
-          path: functional_test_files/reports/functional-test-report.html
+      - name: Check for Rollback Script 
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            if [ ! -f ~/fin-invoice-ocr-team6/bg-rollback.sh ]; then
+              echo "⚠️ Blue-Green rollback script not found!"
+              echo "Looking for a copy in release directories..."
+              
+              # Look for the script in any release directory
+              SCRIPT_PATH=""
+              for release in ~/fin-invoice-ocr-team6/releases/*/; do
+                if [ -f "${release}backend/scripts/bg-rollback.sh" ]; then
+                  SCRIPT_PATH="${release}backend/scripts/bg-rollback.sh"
+                  break
+                fi
+              done
+              
+              if [ -n "$SCRIPT_PATH" ]; then
+                echo "Found rollback script at $SCRIPT_PATH, copying to ~/fin-invoice-ocr-team6/bg-rollback.sh"
+                cp "$SCRIPT_PATH" ~/fin-invoice-ocr-team6/bg-rollback.sh
+                chmod +x ~/fin-invoice-ocr-team6/bg-rollback.sh
+              else
+                echo "❌ Rollback script not found in any release directory!"
+                echo "Manual rollback might be required."
+                exit 1
+              fi
+            else
+              echo "✅ Blue-Green rollback script found at ~/fin-invoice-ocr-team6/bg-rollback.sh"
+            fi
+          '
+
+      - name: Perform Rollback
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            if [ -n "${{ github.event.inputs.rollback_version }}" ]; then
+              # Use specified version
+              echo "Executing rollback to version ${{ github.event.inputs.rollback_version }}..."
+              ~/fin-invoice-ocr-team6/bg-rollback.sh --version ${{ github.event.inputs.rollback_version }}
+            else
+              # Use automatic rollback to previous version
+              echo "Executing automatic rollback to previous version..."
+              ~/fin-invoice-ocr-team6/bg-rollback.sh
+            fi
+          '
+
+      - name: Verify Rollback
+        run: |
+          # Wait for the application to fully start
+          sleep 5
+
+          # Check health endpoints for both environments
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Testing Blue environment health endpoint..."
+            BLUE_HEALTH=$(curl -s http://localhost:3000/health)
+            echo "Blue health check response: $BLUE_HEALTH"
+            BLUE_STATUS=$(echo $BLUE_HEALTH | grep -o "\"status\":\"ok\"" || echo "failed")
+            
+            echo "Testing Green environment health endpoint..."
+            GREEN_HEALTH=$(curl -s http://localhost:3005/health)
+            echo "Green health check response: $GREEN_HEALTH"
+            GREEN_STATUS=$(echo $GREEN_HEALTH | grep -o "\"status\":\"ok\"" || echo "failed")
+            
+            if [ "$BLUE_STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Blue environment rollback successful!"
+              if [ -f ~/fin-invoice-ocr-team6/environments/blue/current/release.json ]; then
+                echo "Current Blue release info:"
+                cat ~/fin-invoice-ocr-team6/environments/blue/current/release.json
+              fi
+            else
+              echo "❌ Blue environment health check failed after rollback!"
+            fi
+            
+            if [ "$GREEN_STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Green environment rollback successful!"
+              if [ -f ~/fin-invoice-ocr-team6/environments/green/current/release.json ]; then
+                echo "Current Green release info:"
+                cat ~/fin-invoice-ocr-team6/environments/green/current/release.json
+              fi
+            else
+              echo "❌ Green environment health check failed after rollback!"
+            fi
+            
+            if [ "$BLUE_STATUS" != "\"status\":\"ok\"" ] && [ "$GREEN_STATUS" != "\"status\":\"ok\"" ]; then
+              echo "❌ Both environments failed health checks after rollback!"
+              exit 1
+            fi
+          '
+
+      - name: Notify New Relic of Rollback
+        if: success()
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Get rollback version from current release
+            if [ -f ~/fin-invoice-ocr-team6/environments/blue/current/release.json ]; then
+              ROLLBACK_VERSION=$(cat ~/fin-invoice-ocr-team6/environments/blue/current/release.json | grep -o "\"version\":[^,]*" | cut -d":" -f2 | tr -d "\"" | tr -d " ")
+              
+              if [ -n "$ROLLBACK_VERSION" ]; then
+                echo "Notifying New Relic about rollback to version $ROLLBACK_VERSION"
+                
+                NEW_RELIC_API_KEY=$(grep NEW_RELIC_API_KEY ~/fin-invoice-ocr-team6/shared/.env | cut -d"=" -f2 || echo "")
+                
+                if [ -n "$NEW_RELIC_API_KEY" ]; then
+                  curl -X POST "https://api.newrelic.com/v2/applications/deployment.json" \
+                    -H "X-Api-Key: $NEW_RELIC_API_KEY" \
+                    -H "Content-Type: application/json" \
+                    -d "{
+                      \"deployment\": {
+                        \"revision\": \"$ROLLBACK_VERSION\",
+                        \"changelog\": \"Manual rollback via GitHub Actions\",
+                        \"description\": \"Blue/Green Rollback\",
+                        \"user\": \"${{ github.actor }}\"
+                      }
+                    }"
+                else
+                  echo "New Relic API key not found in environment variables"
+                fi
+              else
+                echo "Could not determine rollback version from release.json"
+              fi
+            else
+              echo "No release.json found in current Blue environment"
+            fi
+          '
+
+  post-action:
+    name: Post Action Notification
+    runs-on: ubuntu-latest
+    needs: [deploy, rollback]
+    if: always() && (needs.deploy.result == 'success' || needs.rollback.result == 'success')
+    steps:
+      - name: Send Notification
+        run: |
+          ACTION="${{ github.event.inputs.action }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+
+          if [ "$ACTION" = "deploy" ]; then
+            BRANCH="${{ github.event.inputs.branch }}"
+            MESSAGE="✅ Manual Blue-Green deployment completed successfully
+            - Environment: $ENVIRONMENT
+            - Branch: $BRANCH
+            - Actor: ${{ github.actor }}
+            - Time: $(date -u)"
+          else
+            VERSION="${{ github.event.inputs.rollback_version }}"
+            MESSAGE="🔄 Manual Blue-Green rollback completed successfully
+            - Environment: $ENVIRONMENT
+            - Version: ${VERSION:-'Previous version (automatic)'}
+            - Actor: ${{ github.actor }}
+            - Time: $(date -u)"
+          fi
+
+          echo "$MESSAGE"
+
+          # You can add Slack, Teams, or Discord notifications here
+          # Example for Slack webhook:
+          # curl -X POST -H 'Content-type: application/json' --data '{"text":"'"$MESSAGE"'"}' ${{ secrets.SLACK_WEBHOOK_URL }}
