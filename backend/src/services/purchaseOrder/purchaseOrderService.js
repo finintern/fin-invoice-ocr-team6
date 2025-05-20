@@ -229,6 +229,9 @@ class PurchaseOrderService extends FinancialDocumentService {
 
   async getPurchaseOrderById(id) {
     try {
+      // Log request
+      PurchaseOrderLogger.logGetByIdRequest(id);
+
       const purchaseOrder = await this.purchaseOrderRepository.findById(id);
 
       // Return early with appropriate message for PROCESSING and FAILED states
@@ -261,8 +264,13 @@ class PurchaseOrderService extends FinancialDocumentService {
         vendor = await this.vendorRepository.findById(purchaseOrder.vendor_id);
       }
 
+      // Log success
+      PurchaseOrderLogger.logGetByIdSuccess(id);
+
       return this.responseFormatter.formatPurchaseOrderResponse(purchaseOrder, items, customer, vendor);
     } catch (error) {
+      // Log error
+      PurchaseOrderLogger.logGetByIdError(id, error);
       console.error("Error retrieving purchase order:", error);
       throw error;
     }

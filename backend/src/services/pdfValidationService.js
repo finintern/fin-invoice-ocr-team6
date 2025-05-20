@@ -1,5 +1,5 @@
 const path = require("path");
-const pdfjsLib = require("pdfjs-dist");
+const pdfCounter = require("pdf-page-counter");
 const { PayloadTooLargeError, UnsupportedMediaTypeError, ValidationError } = require("../utils/errors");
 
 class PdfValidationService {
@@ -67,8 +67,8 @@ class PdfValidationService {
         
         const pdfTrailer = pdfBuffer.subarray(bufferSize - searchSize).toString('utf-8');
         return pdfTrailer.includes('/Encrypt');
-    }
-
+    }    
+    
     /**
      * Validates the number of pages in a PDF file.
      * 
@@ -81,11 +81,8 @@ class PdfValidationService {
      */
     async validatePdfPageCount(fileBuffer) {
         try {
-            const uint8ArrayBuffer = new Uint8Array(fileBuffer);
-
-            const loadingTask = pdfjsLib.getDocument({ data: uint8ArrayBuffer });
-            const pdfDocument = await loadingTask.promise;
-            const pageCount = pdfDocument.numPages;
+            const data = await pdfCounter(fileBuffer);
+            const pageCount = data.numpages;
 
             if (pageCount === 0) {
                 throw new Error("PDF has no pages.");
@@ -102,7 +99,7 @@ class PdfValidationService {
             }
             throw new Error("Failed to read PDF page count.");
         }
-    }
+    }  
 
     async allValidations(fileBuffer, mimeType, fileName) {
         try {

@@ -1,4 +1,4 @@
-name: Node.js CI/CD Pipeline
+name: Node.js CI/CD Pipeline with Blue-Green Deployment
 
 on:
   push:
@@ -6,6 +6,12 @@ on:
       - "**"
   pull_request:
     types: [opened, synchronize, reopened]
+
+# Add top-level permissions (will be inherited by all jobs unless overridden)
+permissions:
+  contents: write # Permission to create releases
+  pull-requests: write # Permission for commenting on PRs
+  issues: write # Permission for issue management
 
 jobs:
   build:
@@ -121,14 +127,44 @@ jobs:
           REPO_NAME="${{ github.repository }}"
           echo "Code Coverage Report: https://codecov.io/gh/${REPO_NAME}/branch/${BRANCH_NAME}"
 
-  deploy:
-    name: Deploy to Staging
+  deploy-green:
+    name: Deploy to Green Environment
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/staging'
+    if: github.ref == 'refs/heads/staging' || 'refs/heads/deployment-2'
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Build Application
+        working-directory: backend
+        run: npm run build
+        env:
+          NODE_ENV: staging
+
+      - name: Generate Combined Version (package.json + commit)
+        working-directory: backend
+        id: get_version
+        run: |
+          BASE_VERSION=$(jq -r .version package.json)
+          VERSION="$BASE_VERSION-${GITHUB_SHA::8}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "🏷️ Combined Version: $VERSION"
+
 
       - name: Install SSH client
         run: sudo apt-get install openssh-client
@@ -157,25 +193,194 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
           echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
           echo "DSN=${{ secrets.DSN }}" >> .env
-          echo "cat .env"
-          cat .env
+          echo "NEW_RELIC_LICENSE_KEY=${{ secrets.NEW_RELIC_LICENSE_KEY }}" >> .env
+          echo "NEW_RELIC_ENABLED=true" >> .env
 
-      - name: Deploy to Staging
+      - name: Setup Directory Structure
         run: |
           ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
-            cd ~/fin-invoice-ocr-team6/backend &&
-            git fetch origin &&
-            git reset --hard origin/staging &&
-            npm ci &&
-            npx sequelize-cli db:migrate --env staging &&
-            pm2 restart invoice-ocr-backend || pm2 start server.js --name invoice-ocr-backend &&
-            pm2 save
+            # Create necessary directories if they don't exist
+            mkdir -p ~/fin-invoice-ocr-team6/releases
+            mkdir -p ~/fin-invoice-ocr-team6/backups
+            mkdir -p ~/fin-invoice-ocr-team6/shared
+            mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
+            mkdir -p ~/fin-invoice-ocr-team6/db_backups
+            mkdir -p ~/fin-invoice-ocr-team6/environments/green/current/backend
+            mkdir -p ~/fin-invoice-ocr-team6/environments/blue/current/backend
           "
+      
+      - name: Create Database Backup
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Load environment variables
+            source ~/fin-invoice-ocr-team6/shared/.env
+            
+            # Create DB backup directory
+            mkdir -p ~/fin-invoice-ocr-team6/db_backups
+            
+            echo "Creating MySQL database backup..."
+            
+            # Create MySQL backup with timestamp
+            BACKUP_FILE=~/fin-invoice-ocr-team6/db_backups/backup-$(date +%Y%m%d%H%M%S).sql
+            mysqldump -h $DB_HOST -P $DB_PORT -u $DB_USER -p$DB_PASSWORD $DB_NAME > $BACKUP_FILE
+            
+            if [ $? -eq 0 ]; then
+              echo "MySQL backup completed successfully: $BACKUP_FILE"
+              ls -lh $BACKUP_FILE
+            else
+              echo "MySQL backup failed!"
+            fi
+            
+            # Keep only last 5 backups
+            find ~/fin-invoice-ocr-team6/db_backups -name "backup-*.sql" -type f | sort -r | tail -n +6 | xargs rm -f 2>/dev/null || true
+          '
+
+      - name: Copy Environment File to Server
+        run: |
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
+
+      - name: Create New Relic Configuration
+        run: |
+          # Create newrelic.js configuration
+          cat > newrelic.js << 'EOF'
+          'use strict'
+          exports.config = {
+            app_name: [process.env.NEW_RELIC_APP_NAME || 'invoice-ocr-backend'],
+            license_key: process.env.NEW_RELIC_LICENSE_KEY,
+            logging: {
+              level: 'info'
+            },
+            allow_all_headers: true,
+            distributed_tracing: {
+              enabled: true
+            },
+            attributes: {
+              exclude: [
+                'request.headers.cookie',
+                'request.headers.authorization',
+                'request.headers.proxyAuthorization',
+                'request.headers.setCookie*',
+                'request.headers.x*',
+                'response.headers.cookie',
+                'response.headers.authorization',
+                'response.headers.proxyAuthorization',
+                'response.headers.setCookie*',
+                'response.headers.x*'
+              ]
+            }
+          }
+          EOF
+          
+          # Upload to server
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem newrelic.js ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/newrelic.js
+
+      - name: Create Release Version
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Create new release directory
+            mkdir -p ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+            
+            # Clone repo into the new release directory
+            cd ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+            git clone --depth 1 -b ${{ github.ref_name }} https://github.com/${{ github.repository }} .
+            
+            # Install dependencies and build in release directory
+            cd backend
+            npm ci --production
+            
+            npm install newrelic --save
+            
+            # Create symbolic link to shared .env file
+            ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            
+            # Create symbolic link to shared newrelic.js file
+            ln -sf ~/fin-invoice-ocr-team6/shared/newrelic.js ./newrelic.js
+            
+            # Create symbolic link to shared uploads directory
+            ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
+            
+            # Run migrations
+            npx sequelize-cli db:migrate --env staging
+            
+            # Create release metadata file
+            echo "{
+              \"version\": \"${{ env.VERSION }}\",
+              \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",
+              \"branch\": \"${{ github.ref_name }}\",
+              \"commit\": \"${{ github.sha }}\",
+              \"actor\": \"${{ github.actor }}\"
+            }" > ../release.json
+          '
+
+      - name: Deploy to Green Environment
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Deploy to Green environment (port 3005)
+            # Copy from release to green environment
+            rm -rf ~/fin-invoice-ocr-team6/environments/green/current/*
+            cp -R ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}/* ~/fin-invoice-ocr-team6/environments/green/current/
+            
+            # Set up symlinks
+            cd ~/fin-invoice-ocr-team6/environments/green/current/backend
+            ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            ln -sf ~/fin-invoice-ocr-team6/shared/newrelic.js ./newrelic.js
+            ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
+            
+            # Stop and start Green environment with New Relic
+            pm2 stop invoice-ocr-backend-green || true
+            pm2 delete invoice-ocr-backend-green || true
+            
+            # Start with New Relic integration
+            PORT=3005 \
+            NEW_RELIC_ENABLED=true \
+            NEW_RELIC_APP_NAME=invoice-ocr-backend-green \
+            NEW_RELIC_LICENSE_KEY=$(grep NEW_RELIC_LICENSE_KEY .env | cut -d"=" -f2) \
+            DEPLOYMENT_COLOR=green \
+            pm2 start server.js --name invoice-ocr-backend-green --node-args="-r newrelic"
+            
+            echo "Deployed to Green environment (port 3005) with New Relic monitoring"
+            pm2 list | grep invoice
+          '
+
+      - name: Verify Green Deployment
+        id: verify-green
+        run: |
+          # Wait for application to start
+          sleep 5
+          
+          # Check Green health endpoint
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Testing Green environment health endpoint..."
+            GREEN_HEALTH=$(curl -s http://localhost:3005/health)
+            echo "Green health check response: $GREEN_HEALTH"
+            GREEN_STATUS=$(echo $GREEN_HEALTH | grep -o "\"status\":\"ok\"" || echo "failed")
+            
+            # Check New Relic connection
+            echo "Checking New Relic connection..."
+            pm2 logs invoice-ocr-backend-green --lines 20 --nostream | grep "New Relic" || echo "No New Relic logs found yet"
+            
+            if [ "$GREEN_STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Green environment health check passed!"
+              exit 0
+            else
+              echo "❌ Green environment health check failed!"
+              exit 1
+            fi
+          '
+
+      - name: Notify Discord (Green Deploy Failed)
+        if: steps.verify-green.outcome == 'failure'
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"❌ *Deploy Green gagal* di branch \`${{ github.ref_name }}\` oleh \`${{ github.actor }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
 
   functional-test:
-    name: Run Functional Tests
+    name: Run Functional Tests on Green Environment
     runs-on: ubuntu-latest
-    needs: deploy
+    needs: deploy-green
+    if: github.ref == 'refs/heads/staging' || 'refs/heads/deployment-2'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -199,7 +404,10 @@ jobs:
           fi
 
       - name: Create staging-environment.json from secret
-        run: echo '${{ secrets.STAGING_ENVIRONMENT_JSON }}' > functional_test_files/staging-environment.json
+        run: |
+          # Create JSON environment with Green environment URL (port 3005)
+          echo '${{ secrets.STAGING_ENVIRONMENT_JSON }}' | 
+          sed 's/"url": "http:\/\/localhost:3000"/"url": "http:\/\/localhost:3005"/' > functional_test_files/staging-environment.json
 
       - name: Verify environment file
         run: |
@@ -209,22 +417,14 @@ jobs:
           fi
           echo "Environment file created successfully"
           
-      - name: Verify repository content
-        run: |
-          echo "Current working directory: $(pwd)"
-          echo "Repository content:"
-          ls -la
-          echo "Functional test files directory content:"
-          ls -la functional_test_files/ || echo "Functional test files directory not found!"
-          
       - name: Create reports directory
         working-directory: functional_test_files
         run: mkdir -p reports
 
-      - name: Run Functional Tests with htmlextra
+      - name: Run Functional Tests with htmlextra against Green Environment
         working-directory: functional_test_files
         run: |
-          echo "Starting Newman tests..."
+          echo "Starting Newman tests against Green environment (port 3005)..."
           newman run functional-test.json -e staging-environment.json -r htmlextra --reporter-htmlextra-skipSensitiveData --reporter-htmlextra-export ./reports/functional-test-report.html || {
             echo "Newman tests failed with exit code $?"
             if [ -f ./reports/functional-test-report.html ]; then
@@ -234,11 +434,425 @@ jobs:
             fi
             exit 1
           }
-          echo "Newman tests completed successfully"
+          echo "Newman tests completed successfully on Green environment"
+      - name: Notify Discord (Functional Test Success)
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"✅ *Functional test berhasil pada Green Environment* untuk versi \`${{ needs.deploy-green.outputs.version || 'unknown' }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Notify Discord (Functional Test Failed)
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"❌ *Functional test gagal pada Green Environment* untuk versi \`${{ needs.deploy-green.outputs.version || 'unknown' }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
 
       - name: Upload Functional Test Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: functional-test-report
+          name: functional-test-report-green
           path: functional_test_files/reports/functional-test-report.html
+
+  deploy-blue:
+    name: Deploy to Production (Blue)
+    runs-on: ubuntu-latest
+    needs: functional-test
+    if: github.ref == 'refs/heads/staging' || 'refs/heads/deployment-2'
+    permissions:
+      contents: write # Add explicit permission to create releases
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all commit history and tags
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Build Application
+        working-directory: backend
+        run: npm run build
+        env:
+          NODE_ENV: staging
+
+      - name: Generate Combined Version (package.json + commit)
+        working-directory: backend
+        id: get_version
+        run: |
+          BASE_VERSION=$(jq -r .version package.json)
+          VERSION="$BASE_VERSION-${GITHUB_SHA::8}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "🏷️ Combined Version: $VERSION"
+
+      - name: Install SSH client
+        run: sudo apt-get install openssh-client
+
+      - name: Create SSH Key
+        run: echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
+
+      - name: Update SSH Key Permission
+        run: chmod 400 ssh-key.pem
+
+      - name: Set up Staging Environment Variables
+        run: |
+          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+          echo "NODE_ENV=staging" >> .env
+          echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> .env
+          echo "CLIENT_SECRET=${{ secrets.CLIENT_SECRET }}" >> .env
+          echo "AZURE_ENDPOINT=${{ secrets.AZURE_ENDPOINT }}" >> .env
+          echo "AZURE_KEY=${{ secrets.AZURE_KEY }}" >> .env
+          echo "AZURE_INVOICE_MODEL=${{ secrets.AZURE_INVOICE_MODEL }}" >> .env
+          echo "AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}" >> .env
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+          echo "DSN=${{ secrets.DSN }}" >> .env
+          echo "NEW_RELIC_LICENSE_KEY=${{ secrets.NEW_RELIC_LICENSE_KEY }}" >> .env
+          echo "NEW_RELIC_ENABLED=true" >> .env
+
+      - name: Setup Directory Structure
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "
+            # Create necessary directories if they don't exist
+            mkdir -p ~/fin-invoice-ocr-team6/releases
+            mkdir -p ~/fin-invoice-ocr-team6/backups
+            mkdir -p ~/fin-invoice-ocr-team6/shared
+            mkdir -p ~/fin-invoice-ocr-team6/shared/uploads
+            mkdir -p ~/fin-invoice-ocr-team6/db_backups
+            mkdir -p ~/fin-invoice-ocr-team6/environments/green/current/backend
+            mkdir -p ~/fin-invoice-ocr-team6/environments/blue/current/backend
+          "
+
+      - name: Copy Environment File to Server
+        run: |
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem .env ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/.env
+
+      - name: Create New Relic Configuration
+        run: |
+          # Create newrelic.js configuration
+          cat > newrelic.js << 'EOF'
+          'use strict'
+          exports.config = {
+            app_name: [process.env.NEW_RELIC_APP_NAME || 'invoice-ocr-backend'],
+            license_key: process.env.NEW_RELIC_LICENSE_KEY,
+            logging: {
+              level: 'info'
+            },
+            allow_all_headers: true,
+            distributed_tracing: {
+              enabled: true
+            },
+            attributes: {
+              exclude: [
+                'request.headers.cookie',
+                'request.headers.authorization',
+                'request.headers.proxyAuthorization',
+                'request.headers.setCookie*',
+                'request.headers.x*',
+                'response.headers.cookie',
+                'response.headers.authorization',
+                'response.headers.proxyAuthorization',
+                'response.headers.setCookie*',
+                'response.headers.x*'
+              ]
+            }
+          }
+          EOF
+          
+          # Upload to server
+          scp -o StrictHostKeyChecking=no -i ssh-key.pem newrelic.js ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }}:~/fin-invoice-ocr-team6/shared/newrelic.js
+
+      - name: Create Release Version
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Create new release directory
+            mkdir -p ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+            
+            # Clone repo into the new release directory
+            cd ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}
+            git clone --depth 1 -b ${{ github.ref_name }} https://github.com/${{ github.repository }} .
+            
+            # Install dependencies and build in release directory
+            cd backend
+            npm ci --production
+            
+            npm install newrelic --save
+            
+            # Create symbolic link to shared .env file
+            ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            
+            # Create symbolic link to shared newrelic.js file
+            ln -sf ~/fin-invoice-ocr-team6/shared/newrelic.js ./newrelic.js
+            
+            # Create symbolic link to shared uploads directory
+            ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
+            
+            # Run migrations
+            npx sequelize-cli db:migrate --env staging
+            
+            # Create release metadata file
+            echo "{
+              \"version\": \"${{ env.VERSION }}\",
+              \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\",
+              \"branch\": \"${{ github.ref_name }}\",
+              \"commit\": \"${{ github.sha }}\",
+              \"actor\": \"${{ github.actor }}\"
+            }" > ../release.json
+          '
+
+      - name: Deploy to Blue Environment
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            # Direct deployment to Blue, skipping Green
+            echo "Deploying version ${{ env.VERSION }} to Blue environment (port 3000) with New Relic"
+            
+            # Deploy to Blue environment (port 3000)
+            # Copy from release to blue environment
+            rm -rf ~/fin-invoice-ocr-team6/environments/blue/current/*
+            cp -R ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }}/* ~/fin-invoice-ocr-team6/environments/blue/current/
+            
+            # Set up symlinks
+            cd ~/fin-invoice-ocr-team6/environments/blue/current/backend
+            ln -sf ~/fin-invoice-ocr-team6/shared/.env ./.env
+            ln -sf ~/fin-invoice-ocr-team6/shared/newrelic.js ./newrelic.js
+            ln -sf ~/fin-invoice-ocr-team6/shared/uploads ./uploads
+            
+            # Update current symlink to point to the new release
+            ln -sfn ~/fin-invoice-ocr-team6/releases/${{ env.VERSION }} ~/fin-invoice-ocr-team6/current
+            
+            # Stop and start Blue environment with New Relic
+            pm2 stop invoice-ocr-backend-blue || true
+            pm2 delete invoice-ocr-backend-blue || true
+            
+            # Start with New Relic integration
+            PORT=3000 \
+            NEW_RELIC_ENABLED=true \
+            NEW_RELIC_APP_NAME=invoice-ocr-backend-blue \
+            NEW_RELIC_LICENSE_KEY=$(grep NEW_RELIC_LICENSE_KEY .env | cut -d"=" -f2) \
+            DEPLOYMENT_COLOR=blue \
+            pm2 start server.js --name invoice-ocr-backend-blue --node-args="-r newrelic"
+            
+            # Also start the default app with New Relic (for backwards compatibility)
+            pm2 stop invoice-ocr-backend || true
+            pm2 delete invoice-ocr-backend || true
+            
+            PORT=3000 \
+            NEW_RELIC_ENABLED=true \
+            NEW_RELIC_APP_NAME=invoice-ocr-backend \
+            NEW_RELIC_LICENSE_KEY=$(grep NEW_RELIC_LICENSE_KEY .env | cut -d"=" -f2) \
+            DEPLOYMENT_COLOR=blue \
+            pm2 start server.js --name invoice-ocr-backend --node-args="-r newrelic"
+            
+            pm2 save
+            
+            echo "Deployed to Blue environment (port 3000) with New Relic monitoring"
+            pm2 list | grep invoice
+            
+            # Cleanup old releases (keep only the last 5)
+            cd ~/fin-invoice-ocr-team6/releases
+            ls -td */ | tail -n +6 | xargs rm -rf 2>/dev/null || true
+          '
+
+      - name: Verify Blue Deployment
+        run: |
+          # Wait for application to start
+          sleep 5
+          
+          # Check Blue health endpoint
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} '
+            echo "Testing Blue environment health endpoint..."
+            BLUE_HEALTH=$(curl -s http://localhost:3000/health)
+            echo "Blue health check response: $BLUE_HEALTH"
+            BLUE_STATUS=$(echo $BLUE_HEALTH | grep -o "\"status\":\"ok\"" || echo "failed")
+            
+            # Check New Relic connection
+            echo "Checking New Relic connection..."
+            pm2 logs invoice-ocr-backend-blue --lines 20 --nostream | grep "New Relic" || echo "No New Relic logs found yet"
+            
+            if [ "$BLUE_STATUS" = "\"status\":\"ok\"" ]; then
+              echo "✅ Blue environment health check passed!"
+              echo "✅ Deployment completed successfully to Blue environment with New Relic monitoring."
+            else
+              echo "❌ Blue environment health check failed!"
+              echo "⚠️ Warning: Blue deployment failed. Traffic is going to Blue."
+              exit 1
+            fi
+          '
+      - name: Notify Discord (Blue Deploy Success)
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"✅ *Deploy Blue berhasil* untuk versi \`${{ env.VERSION }}\` oleh \`${{ github.actor }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Notify Discord (Blue Deploy Failed)
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+              -X POST \
+              -d "{\"content\": \"❌ *Deploy Blue gagal* untuk versi \`${{ env.VERSION }}\` oleh \`${{ github.actor }}\`\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}
+
+
+      - name: Notify New Relic of Deployment
+        if: success()
+        run: |
+          curl -X POST "https://api.newrelic.com/v2/applications/deployment.json" \
+            -H "X-Api-Key: ${{ secrets.NEW_RELIC_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "deployment": {
+                "revision": "${{ env.VERSION }}",
+                "changelog": "Deployment via GitHub Actions CI/CD",
+                "description": "Blue/Green Deployment (Direct to Blue)",
+                "user": "${{ github.actor }}"
+              }
+            }'
+            
+      # Generate changelog after successful blue deployment
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # Ensure the repo is fully fetched
+          git fetch --tags
+
+          # Check if there are any tags
+          TAG_COUNT=$(git tag -l "v[0-9]*" | wc -l)
+          
+          if [ "$TAG_COUNT" -eq 0 ]; then
+            echo "No tags found. Generating changelog for all commits."
+            PREV_TAG=""
+          else
+            # Get the latest tag
+            PREV_TAG=$(git describe --tags --abbrev=0 --match "v[0-9]*")
+          fi
+
+          echo "Previous tag: $PREV_TAG"
+
+          # Generate changelog
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"%s by %an")
+          else
+            CHANGELOG=$(git log "${PREV_TAG}"..HEAD --pretty=format:"%s by %an")
+          fi
+
+          # Initialize grouped changelog
+          CHORE=""
+          FIX=""
+          CONFIG=""
+          GREEN=""
+          OTHER=""
+
+          # Max lines limit
+          MAX_LINES=20
+          LINE_COUNT=0
+
+          # Group changelog
+          while read -r line; do
+            if [ $LINE_COUNT -ge $MAX_LINES ]; then
+              break
+            fi
+
+            COMMIT_TYPE=$(echo "$line" | grep -Eo "^\[(CHORE|FIX|CONFIG|GREEN|chore|fix|config|green)\]" | tr '[:lower:]' '[:upper:]')
+
+            case "$COMMIT_TYPE" in
+              "[CHORE]")
+                CHORE+="$line\n"
+                ;;
+              "[FIX]")
+                FIX+="$line\n"
+                ;;
+              "[CONFIG]")
+                CONFIG+="$line\n"
+                ;;
+              "[GREEN]")
+                GREEN+="$line\n"
+                ;;
+              *)
+                OTHER+="$line\n"
+                ;;
+            esac
+
+            LINE_COUNT=$((LINE_COUNT + 1))
+
+          done <<< "$CHANGELOG"
+
+          # Construct the final changelog
+          FINAL_CHANGELOG=""
+
+          if [ -n "$CHORE" ]; then
+            FINAL_CHANGELOG+="### 🛠️ Chore Updates\n$CHORE\n"
+          fi
+
+          if [ -n "$FIX" ]; then
+            FINAL_CHANGELOG+="### 🐛 Bug Fixes\n$FIX\n"
+          fi
+
+          if [ -n "$CONFIG" ]; then
+            FINAL_CHANGELOG+="### 🔧 Configurations\n$CONFIG\n"
+          fi
+
+          if [ -n "$GREEN" ]; then
+            FINAL_CHANGELOG+="### 🌱 Green Environment Updates\n$GREEN\n"
+          fi
+
+          if [ -n "$OTHER" ]; then
+            FINAL_CHANGELOG+="### 📦 Other Commits\n$OTHER\n"
+          fi
+
+          # Add a notice if the changelog is truncated
+          if [ $LINE_COUNT -eq $MAX_LINES ]; then
+            FINAL_CHANGELOG+="\n...and more commits. View the full commit history in the repository."
+          fi
+
+          # Write changelog to a file instead of using base64 encoding
+          echo -e "$FINAL_CHANGELOG" > changelog.md
+          echo "Changelog written to changelog.md"
+
+      - name: Create GitHub Release
+        id: create_release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Using version from env
+          VERSION="${{ env.VERSION }}"
+          
+          # Add v prefix if not present
+          if [[ ! "$VERSION" == v* ]]; then
+            RELEASE_TAG="v$VERSION"
+          else
+            RELEASE_TAG="$VERSION"
+          fi
+          
+          RELEASE_TITLE="Release $VERSION"
+          
+          # Read changelog from file
+          CHANGELOG=$(cat changelog.md)
+
+          echo "Creating GitHub release with tag: $RELEASE_TAG"
+          
+          # Create the release with explicit token
+          gh auth status || echo "Not authenticated with GitHub"
+          gh release create "$RELEASE_TAG" \
+          --title "$RELEASE_TITLE" \
+          --notes "$CHANGELOG" \
+          --target "${{ github.ref_name }}"
