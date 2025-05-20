@@ -24,8 +24,9 @@ jest.mock('../../src/services/s3Service', () => ({
       // Return successful result for all valid cases (including null/undefined documentId)
       return Promise.resolve('https://example.com/analysis/doc-123-analysis.json');
     } catch (error) {
-      // If JSON.stringify fails
-      return Promise.reject(new Error('Cannot convert circular structure to JSON'));
+      // If JSON.stringify fails, propagate the original error
+      // This preserves the stack trace and error details
+      return Promise.reject(error);
     }
   })
 }));

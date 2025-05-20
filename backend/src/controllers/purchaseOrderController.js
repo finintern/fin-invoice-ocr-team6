@@ -6,6 +6,7 @@ const { from, of, throwError } = require('rxjs');
 const { catchError, mergeMap, tap } = require('rxjs/operators');
 const validateDeletionService = require('../services/validateDeletion');
 const s3Service = require('../services/s3Service');
+const PurchaseOrderLogger = require('../services/purchaseOrder/purchaseOrderLogger');
 
 class PurchaseOrderController extends FinancialDocumentController {
   constructor(dependencies = {}) {
@@ -114,6 +115,11 @@ class PurchaseOrderController extends FinancialDocumentController {
     const { id } = req.params;
     const partnerId = req.user?.uuid; 
 
+    // Log the deletion request first before attempting deletion
+    if (id) {
+      PurchaseOrderLogger.logDeletionInitiated(id);
+    }
+
     if (!partnerId) {
       return this.handleError(res, new AuthError("Unauthorized"));
     }
@@ -136,7 +142,6 @@ class PurchaseOrderController extends FinancialDocumentController {
     from(this.validateDeletionService.validatePurchaseOrderDeletion(partnerId, id))
       .pipe(
         catchError(error => {
-          console.error(`Error validating deletion for purchase order ${id}:`, error);
           Sentry.captureException(error, { extra: { purchaseOrderId: id, partnerId } });
           
           // Handle validation errors directly and don't continue the pipeline
@@ -173,10 +178,8 @@ class PurchaseOrderController extends FinancialDocumentController {
         mergeMap(() => this.purchaseOrderService.deletePurchaseOrderById(id)), 
         tap(() => {
           Sentry.captureMessage(`Purchase Order ${id} successfully deleted by ${partnerId}`, { level: 'info' });
-          console.log(`Purchase Order ${id} successfully deleted.`);
         }),
         catchError(error => {
-          console.error(`Error deleting purchase order ${id}:`, error);
           Sentry.captureException(error, { extra: { purchaseOrderId: id, partnerId } });
 
           // Handle errors properly by checking instance type first, then message
