@@ -131,7 +131,7 @@ jobs:
     name: Deploy to Green Environment
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/staging' || 'refs/heads/deployment-2'
+    if: github.ref == 'refs/heads/staging'
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
@@ -380,7 +380,7 @@ jobs:
     name: Run Functional Tests on Green Environment
     runs-on: ubuntu-latest
     needs: deploy-green
-    if: github.ref == 'refs/heads/staging' || 'refs/heads/deployment-2'
+    if: github.ref == 'refs/heads/staging' 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -462,7 +462,7 @@ jobs:
     name: Deploy to Production (Blue)
     runs-on: ubuntu-latest
     needs: functional-test
-    if: github.ref == 'refs/heads/staging' || 'refs/heads/deployment-2'
+    if: github.ref == 'refs/heads/staging'
     permissions:
       contents: write # Add explicit permission to create releases
     steps:
