@@ -238,17 +238,11 @@ class PurchaseOrderService extends FinancialDocumentService {
 
       // Return early with appropriate message for PROCESSING and FAILED states
       if (purchaseOrder.status === DocumentStatus.PROCESSING) {
-        return {
-          message: "Purchase order is still being processed. Please try again later.",
-          data: { documents: [] }
-        };
+        return this.responseFormatter.formatStatusResponse(purchaseOrder, DocumentStatus.PROCESSING); 
       }
 
       if (purchaseOrder.status === DocumentStatus.FAILED) {
-        return {
-          message: "Purchase order processing failed. Please re-upload the document.",
-          data: { documents: [] }
-        };
+        return this.responseFormatter.formatStatusResponse(purchaseOrder, DocumentStatus.FAILED); 
       }
 
       // Fetch related data for ANALYZED purchase orders

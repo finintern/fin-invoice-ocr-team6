@@ -16,7 +16,8 @@ jest.mock('../../../src/repositories/itemRepository');
 // Mock formatter
 jest.mock('../../../src/services/purchaseOrder/purchaseOrderResponseFormatter', () => {
   return jest.fn().mockImplementation(() => ({
-    formatPurchaseOrderResponse: jest.fn()
+    formatPurchaseOrderResponse: jest.fn(), 
+    formatStatusResponse: jest.fn()
   }));
 });
 
@@ -438,13 +439,18 @@ describe('Purchase Order Service - getPurchaseOrderById', () => {
       const mockPurchaseOrder = {
         id: 'processing-po',
         po_date: '2025-02-01',
-        status: DocumentStatus.PROCESSING
+        status: DocumentStatus.PROCESSING, 
+        file_url: 'http://example.com/processing-po.pdf'
       };
 
       purchaseOrderService.purchaseOrderRepository.findById.mockResolvedValue(mockPurchaseOrder);
       purchaseOrderService.itemRepository.findItemsByDocumentId = jest.fn();
       purchaseOrderService.customerRepository.findById = jest.fn();
       purchaseOrderService.vendorRepository.findById = jest.fn();
+      purchaseOrderService.responseFormatter.formatStatusResponse = jest.fn().mockReturnValue({
+        message: 'Purchase order is still being processed. Please try again later.',
+        data: { documents: [], documentUrl: mockPurchaseOrder.file_url }
+      });
 
       // Act
       const result = await purchaseOrderService.getPurchaseOrderById('processing-po');
@@ -458,7 +464,7 @@ describe('Purchase Order Service - getPurchaseOrderById', () => {
       
       expect(result).toEqual({
         message: 'Purchase order is still being processed. Please try again later.',
-        data: { documents: [] }
+        data: { documents: [], documentUrl: mockPurchaseOrder.file_url }
       });
     });
 
@@ -467,13 +473,18 @@ describe('Purchase Order Service - getPurchaseOrderById', () => {
       const mockPurchaseOrder = {
         id: 'failed-po',
         po_date: '2025-02-01',
-        status: DocumentStatus.FAILED
+        status: DocumentStatus.FAILED, 
+        file_url: 'http://example.com/failed-po.pdf'
       };
 
       purchaseOrderService.purchaseOrderRepository.findById.mockResolvedValue(mockPurchaseOrder);
       purchaseOrderService.itemRepository.findItemsByDocumentId = jest.fn();
       purchaseOrderService.customerRepository.findById = jest.fn();
       purchaseOrderService.vendorRepository.findById = jest.fn();
+      purchaseOrderService.responseFormatter.formatStatusResponse = jest.fn().mockReturnValue({
+        message: 'Purchase order processing failed. Please re-upload the document.',
+        data: { documents: [], documentUrl: mockPurchaseOrder.file_url }
+      });
 
       // Act
       const result = await purchaseOrderService.getPurchaseOrderById('failed-po');
@@ -487,7 +498,7 @@ describe('Purchase Order Service - getPurchaseOrderById', () => {
       
       expect(result).toEqual({
         message: 'Purchase order processing failed. Please re-upload the document.',
-        data: { documents: [] }
+        data: { documents: [], documentUrl: mockPurchaseOrder.file_url }
       });
     });
 

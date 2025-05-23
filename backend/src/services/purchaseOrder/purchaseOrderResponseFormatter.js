@@ -1,4 +1,38 @@
+const DocumentStatus = require('../../models/enums/DocumentStatus.js');
 class PurchaseOrderResponseFormatter {
+  formatStatusResponse(purchaseOrder, status) {
+    if (!purchaseOrder) {
+      throw new Error('purchaseOrder is not provided');
+    }
+
+    if (!purchaseOrder.file_url) {
+      throw new Error('purchaseOrder.file_url is not provided');
+    }
+
+    const statusMessages = {
+      [DocumentStatus.PROCESSING]: "Purchase Order is still being processed. Please try again later.",
+      [DocumentStatus.FAILED]: "Purchase Order processing failed. Please re-upload the document.",
+    };
+
+    if (status === DocumentStatus.ANALYZED) {
+      throw new Error(`Invalid status ${DocumentStatus.ANALYZED}. Use formatPurchaseOrderResponse instead.`); 
+    }
+
+    if (!Object.keys(statusMessages).includes(status)) {
+      throw new Error(`Invalid status ${status}`);
+    }
+
+    const message = statusMessages[status];
+    const fileUrl = purchaseOrder.file_url;
+    return {
+      message: message,
+      data: {
+        documents: [],
+        documentUrl: fileUrl
+      }
+    };
+  }
+
   formatPurchaseOrderResponse(purchaseOrder, items = [], customer = null, vendor = null) {
     const formattedPurchaseOrder = {
       header: {
@@ -22,7 +56,8 @@ class PurchaseOrderResponseFormatter {
 
     return {
       data: {
-        documents: [formattedPurchaseOrder]
+        documents: [formattedPurchaseOrder],
+        documentUrl: purchaseOrder.file_url
       }
     };
   }
