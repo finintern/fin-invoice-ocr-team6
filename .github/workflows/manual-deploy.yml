@@ -1,0 +1,52 @@
+name: Manual Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      rollback_version:
+        description: 'Versi release untuk rollback (misal: 1.3.0-abc123de). Kosongkan untuk rollback otomatis.'
+        required: false
+
+jobs:
+  rollback:
+    name: Manual Rollback to Previous Version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install SSH Client & Setup Key
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-client
+          echo "${{ secrets.SSH_KEY }}" > ssh-key.pem
+          chmod 400 ssh-key.pem
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Run Rollback Script on Server
+        id: run-rollback
+        run: |
+          VERSION_FLAG=""
+          if [[ "${{ github.event.inputs.rollback_version }}" != "" ]]; then
+            VERSION_FLAG="--version ${{ github.event.inputs.rollback_version }}"
+          fi
+
+          ssh -o StrictHostKeyChecking=no -i ssh-key.pem ${{ secrets.USERNAME }}@${{ secrets.SERVER_IP }} "\
+            bash ~/fin-invoice-ocr-team6/scripts/bg-rollback.sh $VERSION_FLAG \
+          "
+
+      - name: Notify Discord (Rollback Success)
+        if: success()
+        run: |
+          VERSION="${{ github.event.inputs.rollback_version || 'previous release' }}"
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "{\"content\": \"✅ *Rollback berhasil* ke versi \`${VERSION}\` oleh \`${{ github.actor }}\`\"}" \
+               ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Notify Discord (Rollback Failed)
+        if: failure()
+        run: |
+          VERSION="${{ github.event.inputs.rollback_version || 'previous release' }}"
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "{\"content\": \"❌ *Rollback gagal!* Versi: \`${VERSION}\` oleh \`${{ github.actor }}\`\"}" \
+               ${{ secrets.DISCORD_WEBHOOK }}

@@ -172,6 +172,50 @@ class PurchaseOrderLogger extends BaseLogger {
     
     this.error('Error deleting purchase order', metadata);
   }
+
+  /**
+   * Log when a purchase order retrieval is requested
+   * @param {string} purchaseOrderId - The ID of the purchase order being retrieved
+   */
+  logGetByIdRequest(purchaseOrderId) {
+    const metadata = this.createMetadata({ purchaseOrderId }, 'GET_BY_ID_REQUEST');
+    this.info('Purchase order retrieval requested', metadata);
+  }
+
+  /**
+   * Log when a purchase order is successfully retrieved
+   * @param {string} purchaseOrderId - The ID of the purchase order that was retrieved
+   */
+  logGetByIdSuccess(purchaseOrderId) {
+    const metadata = this.createMetadata({ purchaseOrderId }, 'GET_BY_ID_SUCCESS');
+    this.info('Purchase order retrieved successfully', metadata);
+  }
+
+  /**
+   * Log when a purchase order is not found during retrieval
+   * @param {string} purchaseOrderId - The ID of the purchase order that was not found
+   */
+  logGetByIdNotFound(purchaseOrderId) {
+    const metadata = this.createMetadata({ purchaseOrderId }, 'GET_BY_ID_NOT_FOUND');
+    this.warn('Purchase order not found', metadata);
+  }
+
+  /**
+   * Log when there's an error retrieving a purchase order
+   * @param {string} purchaseOrderId - The ID of the purchase order
+   * @param {Error} error - The error that occurred
+   */
+  logGetByIdError(purchaseOrderId, error) {
+    const metadata = this.createMetadata({
+      purchaseOrderId,
+      error: error?.message || 'Unknown error',
+      errorCode: error?.code || '',
+      errorName: error?.name || '',
+      stack: error?.stack || ''
+    }, 'GET_BY_ID_ERROR');
+    
+    this.error('Error retrieving purchase order', metadata);
+  }
 }
 
 module.exports = PurchaseOrderLogger;
