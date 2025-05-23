@@ -4,6 +4,8 @@ const {
     setupTestData,
     setupTestEnvironment
 } = require("./invoiceControllerShared");
+const DocumentStatus = require('../../src/models/enums/DocumentStatus');
+
 
 describe("Invoice Controller - Get Methods", () => {
     let req, res, controller, mockInvoiceService;
@@ -177,79 +179,127 @@ describe("Invoice Controller - Get Methods", () => {
     });
 
     describe("getInvoiceStatus", () => {
-        test("should return invoice status when authorized", async () => {
-            const mockStatus = {
-                id: "1",
-                status: "ANALYZED"
-            };
-            const testData = setupTestData();
-            Object.assign(req, testData);
+    // Setup function to wait for observable to complete
+    const waitForObservable = () => {
+      return new Promise(resolve => {
+        setTimeout(resolve, 50);
+      });
+    };
 
-            mockInvoiceService.getPartnerId.mockResolvedValue("test-uuid");
-            mockInvoiceService.getInvoiceStatus.mockResolvedValue(mockStatus);
+    test("should return invoice status when authorized", async () => {
+      // Arrange
+      const mockStatus = {
+        id: "1",
+        status: DocumentStatus.ANALYZED
+      };
+      const testData = setupTestData();
+      Object.assign(req, testData);
 
-            await controller.getInvoiceStatus(req, res);
+      mockInvoiceService.getPartnerId.mockResolvedValue("test-uuid");
+      mockInvoiceService.getInvoiceStatus.mockReturnValue(rxjs.of(mockStatus));
 
-            expect(mockInvoiceService.getPartnerId).toHaveBeenCalledWith("1");
-            expect(mockInvoiceService.getInvoiceStatus).toHaveBeenCalledWith("1");
-            expect(res.status).toHaveBeenCalledWith(200);
-            expect(res.json).toHaveBeenCalledWith(mockStatus);
-        });
+      // Act
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
 
-        test("should return 401 when user is not authenticated", async () => {
-            const testData = setupTestData({ user: undefined });
-            Object.assign(req, testData);
-
-            await controller.getInvoiceStatus(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(401);
-            expect(res.json).toHaveBeenCalledWith({
-                message: "Unauthorized"
-            });
-            expect(mockInvoiceService.getInvoiceStatus).not.toHaveBeenCalled();
-        });
-
-        test("should return 400 when invoice ID is missing", async () => {
-            const testData = setupTestData({ params: {} });
-            Object.assign(req, testData);
-
-            await controller.getInvoiceStatus(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(400);
-            expect(res.json).toHaveBeenCalledWith({
-                message: "Invoice ID is required"
-            });
-            expect(mockInvoiceService.getInvoiceStatus).not.toHaveBeenCalled();
-        });
-
-        test("should return 403 when accessing another user's invoice", async () => {
-            const testData = setupTestData();
-            Object.assign(req, testData);
-
-            mockInvoiceService.getPartnerId.mockResolvedValue("other-uuid");
-
-            await controller.getInvoiceStatus(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(403);
-            expect(res.json).toHaveBeenCalledWith({
-                message: "Forbidden: You do not have access to this invoice"
-            });
-            expect(mockInvoiceService.getInvoiceStatus).not.toHaveBeenCalled();
-        });
-
-        test("should handle invoice not found error", async () => {
-            const testData = setupTestData();
-            Object.assign(req, testData);
-
-            mockInvoiceService.getPartnerId.mockResolvedValue("test-uuid");
-            mockInvoiceService.getInvoiceStatus.mockRejectedValue(new NotFoundError("Invoice not found"));
-
-            await controller.getInvoiceStatus(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(404);
-            expect(res.json).toHaveBeenCalledWith({
-                message: "Invoice not found"
-            });
-        });
+      // Assert
+      expect(mockInvoiceService.getPartnerId).toHaveBeenCalledWith("1");
+      expect(mockInvoiceService.getInvoiceStatus).toHaveBeenCalledWith("1");
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockStatus);
     });
+
+    test("should return 401 when user is not authenticated", async () => {
+      // Arrange
+      const testData = setupTestData({ user: undefined });
+      Object.assign(req, testData);
+
+      // Act
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Unauthorized"
+      });
+      expect(mockInvoiceService.getInvoiceStatus).not.toHaveBeenCalled();
+    });
+
+    test("should return 400 when invoice ID is missing", async () => {
+      // Arrange
+      const testData = setupTestData({ params: {} });
+      Object.assign(req, testData);
+
+      // Act
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Invoice ID is required"
+      });
+      expect(mockInvoiceService.getInvoiceStatus).not.toHaveBeenCalled();
+    });
+
+    test("should return 403 when accessing another user's invoice", async () => {
+      // Arrange
+      const testData = setupTestData();
+      Object.assign(req, testData);
+
+      mockInvoiceService.getPartnerId.mockResolvedValue("other-uuid");
+
+      // Act
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Forbidden: You do not have access to this invoice"
+      });
+      expect(mockInvoiceService.getInvoiceStatus).not.toHaveBeenCalled();
+    });
+
+    test("should handle invoice not found error", async () => {
+      // Arrange
+      const testData = setupTestData();
+      Object.assign(req, testData);
+
+      mockInvoiceService.getPartnerId.mockResolvedValue("test-uuid");
+      // Simulate observable that emits error for not found
+      mockInvoiceService.getInvoiceStatus.mockReturnValue(rxjs.throwError(() => new NotFoundError("Invoice not found")));
+
+      // Act
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Invoice not found"
+      });
+    });
+
+    test("should handle general service errors", async () => {
+      // Arrange
+      const testData = setupTestData();
+      Object.assign(req, testData);
+
+      mockInvoiceService.getPartnerId.mockResolvedValue("test-uuid");
+      // Simulate observable that emits a general error
+      mockInvoiceService.getInvoiceStatus.mockReturnValue(rxjs.throwError(() => new Error("Service error")));
+
+      // Act
+      controller.getInvoiceStatus(req, res);
+      await waitForObservable();
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        message: "Internal server error"
+      });
+    });
+  });
 });
